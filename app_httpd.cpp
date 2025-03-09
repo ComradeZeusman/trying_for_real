@@ -23,6 +23,22 @@
 #include "fd_forward.h"
 #include "fr_forward.h"
 
+#ifndef MIN
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
+
+// Add authentication related structures and variables
+typedef struct {
+    char username[32];
+    char password[32];
+    uint8_t face_id;
+} user_t;
+
+#define MAX_USERS 10
+static user_t users[MAX_USERS];
+static int num_users = 0;
+static bool is_authenticated = false;
+
 #define ENROLL_CONFIRM_TIMES 5
 #define FACE_ID_SAVE_NUMBER 7
 
@@ -581,6 +597,108 @@ static esp_err_t status_handler(httpd_req_t *req){
 
 static esp_err_t index_handler(httpd_req_t *req){
     httpd_resp_set_type(req, "text/html");
+    if (is_authenticated) {
+        return httpd_resp_send(req, DASHBOARD_HTML, strlen(DASHBOARD_HTML));
+    } else {
+        return httpd_resp_send(req, LOGIN_HTML, strlen(LOGIN_HTML));
+    }
+}
+
+static esp_err_t login_handler(httpd_req_t *req) {
+    char content[100];
+    size_t recv_size = MIN(req->content_len, sizeof(content));
+
+    int ret = httpd_req_recv(req, content, recv_size);
+    if (ret <= 0) {
+        return ESP_FAIL;
+    }
+    content[recv_size] = '\0';
+
+    char username[32];
+    char password[32];
+    // Basic parsing of JSON - in real app use proper JSON parser
+    if (sscanf(content, "{\"username\":\"%31[^\"]\",\"password\":\"%31[^\"]\"}", username, password) == 2) {
+        for (int i = 0; i < num_users; i++) {
+            if (strcmp(users[i].username, username) == 0 && 
+                strcmp(users[i].password, password) == 0) {
+                is_authenticated = true;
+                httpd_resp_set_status(req, "200 OK");
+                httpd_resp_send(req, NULL, 0);
+                return ESP_OK;
+            }
+        }
+    }
+    
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t register_handler(httpd_req_t *req) {
+    if (num_users >= MAX_USERS) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_send(req, "Maximum users reached", 0);
+        return ESP_OK;
+    }
+
+    char content[100];
+    size_t recv_size = MIN(req->content_len, sizeof(content));
+
+    int ret = httpd_req_recv(req, content, recv_size);
+    if (ret <= 0) {
+        return ESP_FAIL;
+    }
+    content[recv_size] = '\0';
+
+    char username[32];
+    char password[32];
+    if (sscanf(content, "{\"username\":\"%31[^\"]\",\"password\":\"%31[^\"]\"}", username, password) == 2) {
+        strncpy(users[num_users].username, username, sizeof(users[num_users].username) - 1);
+        strncpy(users[num_users].password, password, sizeof(users[num_users].password) - 1);
+        users[num_users].face_id = id_list.tail;
+        num_users++;
+        
+        httpd_resp_set_status(req, "200 OK");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
+    
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t logout_handler(httpd_req_t *req) {
+    is_authenticated = false;
+    httpd_resp_set_status(req, "200 OK");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t check_auth_handler(httpd_req_t *req) {
+    if (is_authenticated) {
+        httpd_resp_set_status(req, "200 OK");
+    } else {
+        httpd_resp_set_status(req, "401 Unauthorized");
+    }
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t dashboard_handler(httpd_req_t *req) {
+    if (!is_authenticated) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
+    
+    httpd_resp_set_type(req, "text/html");
+    return httpd_resp_send(req, DASHBOARD_HTML, strlen(DASHBOARD_HTML));
+}
+
+static esp_err_t registration_page_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, REGISTRATION_HTML, strlen(REGISTRATION_HTML));
 }
 
@@ -591,6 +709,49 @@ void startCameraServer(){
         .uri       = "/",
         .method    = HTTP_GET,
         .handler   = index_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t registration_page_uri = {
+        .uri       = "/register",
+        .method    = HTTP_GET,
+        .handler   = registration_page_handler,
+        .user_ctx  = NULL
+    };
+
+    // Rename existing register_uri to register_api_uri for POST handler
+    httpd_uri_t register_api_uri = {
+        .uri       = "/register/submit",
+        .method    = HTTP_POST,
+        .handler   = register_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t login_uri = {
+        .uri       = "/login",
+        .method    = HTTP_POST,
+        .handler   = login_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t logout_uri = {
+        .uri       = "/logout",
+        .method    = HTTP_POST,
+        .handler   = logout_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t check_auth_uri = {
+        .uri       = "/check-auth",
+        .method    = HTTP_GET,
+        .handler   = check_auth_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t dashboard_uri = {
+        .uri       = "/dashboard",
+        .method    = HTTP_GET,
+        .handler   = dashboard_handler,
         .user_ctx  = NULL
     };
 
@@ -644,6 +805,12 @@ void startCameraServer(){
     Serial.printf("Starting web server on port: '%d'\n", config.server_port);
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(camera_httpd, &index_uri);
+        httpd_register_uri_handler(camera_httpd, &registration_page_uri);
+        httpd_register_uri_handler(camera_httpd, &register_api_uri);
+        httpd_register_uri_handler(camera_httpd, &login_uri);
+        httpd_register_uri_handler(camera_httpd, &logout_uri);
+        httpd_register_uri_handler(camera_httpd, &check_auth_uri);
+        httpd_register_uri_handler(camera_httpd, &dashboard_uri);
         httpd_register_uri_handler(camera_httpd, &cmd_uri);
         httpd_register_uri_handler(camera_httpd, &status_uri);
         httpd_register_uri_handler(camera_httpd, &capture_uri);
