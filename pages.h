@@ -449,3 +449,234 @@ const char REGISTRATION_HTML[] = R"rawliteral(
 </body>
 </html>
 )rawliteral";
+
+const char CAMERA_CONFIG_HTML[] = R"rawliteral(
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ESP32-CAM Configuration</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                text-align: center;
+                background-color: #f0f0f0;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .config-section {
+                margin: 20px 0;
+                text-align: left;
+                padding: 15px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .config-item {
+                margin: 10px 0;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            select, input[type="range"] {
+                width: 200px;
+                margin-left: 10px;
+            }
+            button {
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 5px;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            .back-button {
+                background-color: #666;
+            }
+            .value-display {
+                min-width: 40px;
+                display: inline-block;
+                text-align: right;
+                margin-left: 10px;
+            }
+            .preview-container {
+                margin: 20px 0;
+                text-align: center;
+            }
+            #stream {
+                width: 100%;
+                max-width: 400px;
+                height: auto;
+                border-radius: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Camera Configuration</h1>
+                <button class="back-button" onclick="window.location.href='/dashboard'">Back to Dashboard</button>
+            </div>
+    
+            <div class="preview-container">
+                <h3>Live Preview</h3>
+                <img id="stream" src="" alt="Loading camera stream...">
+            </div>
+    
+            <div class="config-section">
+                <h2>Image Settings</h2>
+                <div class="config-item">
+                    <label>Frame Size:</label>
+                    <select id="framesize" onchange="updateValue('framesize', this.value)">
+                        <option value="0">QQVGA (160x120)</option>
+                        <option value="1">QVGA (320x240)</option>
+                        <option value="2">VGA (640x480)</option>
+                        <option value="3">SVGA (800x600)</option>
+                        <option value="4">XGA (1024x768)</option>
+                        <option value="5">SXGA (1280x1024)</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>Quality (0-63):</label>
+                    <input type="range" id="quality" min="0" max="63" onchange="updateValue('quality', this.value)">
+                    <span id="quality-val" class="value-display">10</span>
+                </div>
+            </div>
+    
+            <div class="config-section">
+                <h2>Camera Adjustments</h2>
+                <div class="config-item">
+                    <label>Brightness (-2 to 2):</label>
+                    <input type="range" id="brightness" min="-2" max="2" step="1" onchange="updateValue('brightness', this.value)">
+                    <span id="brightness-val" class="value-display">0</span>
+                </div>
+                <div class="config-item">
+                    <label>Contrast (-2 to 2):</label>
+                    <input type="range" id="contrast" min="-2" max="2" step="1" onchange="updateValue('contrast', this.value)">
+                    <span id="contrast-val" class="value-display">0</span>
+                </div>
+                <div class="config-item">
+                    <label>Saturation (-2 to 2):</label>
+                    <input type="range" id="saturation" min="-2" max="2" step="1" onchange="updateValue('saturation', this.value)">
+                    <span id="saturation-val" class="value-display">0</span>
+                </div>
+            </div>
+    
+            <div class="config-section">
+                <h2>Special Effects</h2>
+                <div class="config-item">
+                    <label>Effect:</label>
+                    <select id="special_effect" onchange="updateValue('special_effect', this.value)">
+                        <option value="0">No Effect</option>
+                        <option value="1">Negative</option>
+                        <option value="2">Grayscale</option>
+                        <option value="3">Red Tint</option>
+                        <option value="4">Green Tint</option>
+                        <option value="5">Blue Tint</option>
+                        <option value="6">Sepia</option>
+                    </select>
+                </div>
+            </div>
+    
+            <div class="config-section">
+                <h2>Camera Controls</h2>
+                <div class="config-item">
+                    <label>AWB (Auto White Balance):</label>
+                    <input type="checkbox" id="awb" onchange="updateValue('awb', this.checked ? 1 : 0)">
+                </div>
+                <div class="config-item">
+                    <label>AWB Gain:</label>
+                    <input type="checkbox" id="awb_gain" onchange="updateValue('awb_gain', this.checked ? 1 : 0)">
+                </div>
+                <div class="config-item">
+                    <label>Horizontal Mirror:</label>
+                    <input type="checkbox" id="hmirror" onchange="updateValue('hmirror', this.checked ? 1 : 0)">
+                </div>
+                <div class="config-item">
+                    <label>Vertical Flip:</label>
+                    <input type="checkbox" id="vflip" onchange="updateValue('vflip', this.checked ? 1 : 0)">
+                </div>
+            </div>
+        </div>
+    
+        <script>
+            var baseHost = document.location.origin;
+            var streamUrl = baseHost + ':81/stream';
+    
+            document.getElementById('stream').src = streamUrl;
+    
+            // Initialize settings
+            window.onload = function() {
+                fetchCameraStatus();
+            }
+    
+            function fetchCameraStatus() {
+                fetch(baseHost + '/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Update all input values based on current camera status
+                        document.getElementById('framesize').value = data.framesize;
+                        document.getElementById('quality').value = data.quality;
+                        document.getElementById('quality-val').textContent = data.quality;
+                        document.getElementById('brightness').value = data.brightness;
+                        document.getElementById('brightness-val').textContent = data.brightness;
+                        document.getElementById('contrast').value = data.contrast;
+                        document.getElementById('contrast-val').textContent = data.contrast;
+                        document.getElementById('saturation').value = data.saturation;
+                        document.getElementById('saturation-val').textContent = data.saturation;
+                        document.getElementById('special_effect').value = data.special_effect;
+                        document.getElementById('awb').checked = data.awb == 1;
+                        document.getElementById('awb_gain').checked = data.awb_gain == 1;
+                        document.getElementById('hmirror').checked = data.hmirror == 1;
+                        document.getElementById('vflip').checked = data.vflip == 1;
+                    });
+            }
+    
+            function updateValue(variable, value) {
+                fetch(baseHost + `/control?var=${variable}&val=${value}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            console.error('Failed to update:', variable);
+                            return;
+                        }
+                        // Update value display if exists
+                        const displayElement = document.getElementById(variable + '-val');
+                        if (displayElement) {
+                            displayElement.textContent = value;
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+    
+            // Check authentication status periodically
+            function checkAuth() {
+                fetch(baseHost + '/check-auth')
+                    .then(response => {
+                        if (!response.ok) {
+                            window.location.href = '/';
+                        }
+                    });
+                setTimeout(checkAuth, 30000);
+            }
+    
+            checkAuth();
+        </script>
+    </body>
+    </html>
+    )rawliteral";

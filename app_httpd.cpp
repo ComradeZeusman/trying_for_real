@@ -702,6 +702,18 @@ static esp_err_t registration_page_handler(httpd_req_t *req) {
     return httpd_resp_send(req, REGISTRATION_HTML, strlen(REGISTRATION_HTML));
 }
 
+static esp_err_t camera_config_handler(httpd_req_t *req) {
+    if (!is_authenticated) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
+    
+    httpd_resp_set_type(req, "text/html");
+    return httpd_resp_send(req, CAMERA_CONFIG_HTML, strlen(CAMERA_CONFIG_HTML));
+}
+
 void startCameraServer(){
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
@@ -719,7 +731,6 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
-    // Rename existing register_uri to register_api_uri for POST handler
     httpd_uri_t register_api_uri = {
         .uri       = "/register/submit",
         .method    = HTTP_POST,
@@ -783,6 +794,12 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
+    httpd_uri_t camera_config_uri = {
+        .uri       = "/camera_config",
+        .method    = HTTP_GET,
+        .handler   = camera_config_handler,
+        .user_ctx  = NULL
+    };
 
     ra_filter_init(&ra_filter, 20);
     
@@ -814,6 +831,7 @@ void startCameraServer(){
         httpd_register_uri_handler(camera_httpd, &cmd_uri);
         httpd_register_uri_handler(camera_httpd, &status_uri);
         httpd_register_uri_handler(camera_httpd, &capture_uri);
+        httpd_register_uri_handler(camera_httpd, &camera_config_uri);
     }
 
     config.server_port += 1;
