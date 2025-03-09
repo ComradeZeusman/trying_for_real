@@ -27,6 +27,9 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
+// Forward declaration of log_activity function
+static void log_activity(const char* message);
+
 // Add authentication related structures and variables
 typedef struct {
     char username[32];
@@ -50,6 +53,17 @@ static bool is_authenticated = false;
 #define FACE_COLOR_YELLOW (FACE_COLOR_RED | FACE_COLOR_GREEN)
 #define FACE_COLOR_CYAN   (FACE_COLOR_BLUE | FACE_COLOR_GREEN)
 #define FACE_COLOR_PURPLE (FACE_COLOR_BLUE | FACE_COLOR_RED)
+
+#define MAX_ACTIVITIES 10
+
+typedef struct {
+    char message[100];
+    unsigned long timestamp;
+} activity_log_t;
+
+static activity_log_t activities[MAX_ACTIVITIES];
+static int activity_count = 0;
+static unsigned long start_time = 0;
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -193,21 +207,31 @@ static int run_face_recognition(dl_matrix3du_t *image_matrix, box_array_t *net_b
 
             if(left_sample_face == (ENROLL_CONFIRM_TIMES - 1)){
                 Serial.printf("Enrolling Face ID: %d\n", id_list.tail);
+                char msg[100];
+                snprintf(msg, sizeof(msg), "Started enrolling new face ID: %d", id_list.tail);
+                log_activity(msg);
             }
             Serial.printf("Enrolling Face ID: %d sample %d\n", id_list.tail, ENROLL_CONFIRM_TIMES - left_sample_face);
             rgb_printf(image_matrix, FACE_COLOR_CYAN, "ID[%u] Sample[%u]", id_list.tail, ENROLL_CONFIRM_TIMES - left_sample_face);
             if (left_sample_face == 0){
                 is_enrolling = 0;
                 Serial.printf("Enrolled Face ID: %d\n", id_list.tail);
+                char msg[100];
+                snprintf(msg, sizeof(msg), "Successfully enrolled new face ID: %d", id_list.tail);
+                log_activity(msg);
             }
         } else {
             matched_id = recognize_face(&id_list, aligned_face);
             if (matched_id >= 0) {
                 Serial.printf("Match Face ID: %u\n", matched_id);
                 rgb_printf(image_matrix, FACE_COLOR_GREEN, "Hello Subject %u", matched_id);
+                char msg[100];
+                snprintf(msg, sizeof(msg), "Recognized face ID: %d", matched_id);
+                log_activity(msg);
             } else {
                 Serial.println("No Match Found");
                 rgb_print(image_matrix, FACE_COLOR_RED, "Intruder Alert!");
+                log_activity("Intruder Alert - Unknown face detected");
                 matched_id = -1;
             }
         }
@@ -554,12 +578,26 @@ static esp_err_t cmd_handler(httpd_req_t *req){
 }
 
 static esp_err_t status_handler(httpd_req_t *req){
-    static char json_response[1024];
+    static char json_response[2048];  // Increased buffer size
 
     sensor_t * s = esp_camera_sensor_get();
     char * p = json_response;
     *p++ = '{';
 
+    // Add system uptime
+    p+=sprintf(p, "\"uptime\":%lu,", millis() / 1000);
+
+    // Add activities array
+    p+=sprintf(p, "\"activities\":[");
+    for(int i = 0; i < activity_count && i < MAX_ACTIVITIES; i++) {
+        if(i > 0) p+=sprintf(p, ",");
+        p+=sprintf(p, "{\"message\":\"%s\",\"timestamp\":%lu}", 
+            activities[i].message, 
+            activities[i].timestamp / 1000);
+    }
+    p+=sprintf(p, "],");
+
+    // Existing camera status parameters
     p+=sprintf(p, "\"framesize\":%u,", s->status.framesize);
     p+=sprintf(p, "\"quality\":%u,", s->status.quality);
     p+=sprintf(p, "\"brightness\":%d,", s->status.brightness);
@@ -702,19 +740,8 @@ static esp_err_t registration_page_handler(httpd_req_t *req) {
     return httpd_resp_send(req, REGISTRATION_HTML, strlen(REGISTRATION_HTML));
 }
 
-static esp_err_t camera_config_handler(httpd_req_t *req) {
-    if (!is_authenticated) {
-        httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/");
-        httpd_resp_send(req, NULL, 0);
-        return ESP_OK;
-    }
-    
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, CAMERA_CONFIG_HTML, strlen(CAMERA_CONFIG_HTML));
-}
-
 void startCameraServer(){
+    start_time = millis();  // Initialize start time
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     httpd_uri_t index_uri = {
@@ -794,13 +821,6 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
-    httpd_uri_t camera_config_uri = {
-        .uri       = "/camera_config",
-        .method    = HTTP_GET,
-        .handler   = camera_config_handler,
-        .user_ctx  = NULL
-    };
-
     ra_filter_init(&ra_filter, 20);
     
     mtmn_config.type = FAST;
@@ -831,7 +851,6 @@ void startCameraServer(){
         httpd_register_uri_handler(camera_httpd, &cmd_uri);
         httpd_register_uri_handler(camera_httpd, &status_uri);
         httpd_register_uri_handler(camera_httpd, &capture_uri);
-        httpd_register_uri_handler(camera_httpd, &camera_config_uri);
     }
 
     config.server_port += 1;
@@ -840,4 +859,16 @@ void startCameraServer(){
     if (httpd_start(&stream_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(stream_httpd, &stream_uri);
     }
+}
+
+static void log_activity(const char* message) {
+    if (activity_count < MAX_ACTIVITIES) {
+        activity_count++;
+    }
+    // Shift activities
+    for (int i = MAX_ACTIVITIES - 1; i > 0; i--) {
+        memcpy(&activities[i], &activities[i-1], sizeof(activity_log_t));
+    }
+    strncpy(activities[0].message, message, sizeof(activities[0].message) - 1);
+    activities[0].timestamp = millis();
 }

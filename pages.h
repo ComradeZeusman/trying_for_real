@@ -205,6 +205,14 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             align-items: center;
             margin-bottom: 20px;
         }
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
         .video-container {
             margin: 20px 0;
         }
@@ -233,6 +241,52 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             gap: 10px;
             margin: 20px 0;
         }
+        .activity-log {
+            text-align: left;
+            margin: 20px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .activity-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background: white;
+            margin: 15% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+        }
+        .close {
+            float: right;
+            cursor: pointer;
+            font-size: 24px;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -242,14 +296,62 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             <button class="logout" onclick="logout()">Logout</button>
         </div>
 
+        <div class="status-bar">
+            <div>System Uptime: <span id="uptime">0s</span></div>
+            <div>Face Detection: <span id="detectStatus">OFF</span></div>
+            <div>Face Recognition: <span id="recognizeStatus">OFF</span></div>
+        </div>
+
         <div class="video-container">
             <img id="stream" src="" alt="Loading camera stream...">
         </div>
 
         <div class="controls">
-            <button onclick="toggleDetection()">Face Detection: <span id="detectStatus">OFF</span></button>
-            <button onclick="toggleRecognition()">Face Recognition: <span id="recognizeStatus">OFF</span></button>
+            <button onclick="toggleDetection()">Toggle Face Detection</button>
+            <button onclick="toggleRecognition()">Toggle Face Recognition</button>
             <button onclick="capturePhoto()">Capture Photo</button>
+            <button onclick="openSettings()">Camera Settings</button>
+        </div>
+
+        <div class="activity-log">
+            <h3>Recent Activities</h3>
+            <div id="activities"></div>
+        </div>
+    </div>
+
+    <!-- Camera Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeSettings()">&times;</span>
+            <h2>Camera Settings</h2>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <label for="framesize">Resolution</label>
+                    <select id="framesize" onchange="updateCameraSetting('framesize', this.value)">
+                        <option value="0">QQVGA(160x120)</option>
+                        <option value="3">HQVGA(240x176)</option>
+                        <option value="4">QVGA(320x240)</option>
+                        <option value="5">CIF(400x296)</option>
+                        <option value="6">VGA(640x480)</option>
+                        <option value="8">SVGA(800x600)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="quality">Quality</label>
+                    <input type="range" id="quality" min="4" max="63" value="10" 
+                           onchange="updateCameraSetting('quality', this.value)">
+                </div>
+                <div class="setting-item">
+                    <label for="brightness">Brightness</label>
+                    <input type="range" id="brightness" min="-2" max="2" value="0" 
+                           onchange="updateCameraSetting('brightness', this.value)">
+                </div>
+                <div class="setting-item">
+                    <label for="contrast">Contrast</label>
+                    <input type="range" id="contrast" min="-2" max="2" value="0" 
+                           onchange="updateCameraSetting('contrast', this.value)">
+                </div>
+            </div>
         </div>
     </div>
 
@@ -260,6 +362,27 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         var recognition = false;
 
         document.getElementById('stream').src = streamUrl;
+
+        // Settings Modal
+        function openSettings() {
+            document.getElementById('settingsModal').style.display = 'block';
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('settingsModal')) {
+                closeSettings();
+            }
+        }
+
+        function updateCameraSetting(setting, value) {
+            fetch(baseHost + '/control?var=' + setting + '&val=' + value)
+                .then(response => response.text())
+                .catch(error => console.error('Error:', error));
+        }
 
         function toggleDetection() {
             detection = !detection;
@@ -287,6 +410,49 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     window.location.href = '/';
                 });
         }
+
+        function formatTime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            
+            if (days > 0) return `${days}d ${hours}h ${minutes}m ${secs}s`;
+            if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+            if (minutes > 0) return `${minutes}m ${secs}s`;
+            return `${secs}s`;
+        }
+
+        function updateStatus() {
+            fetch(baseHost + '/status')
+                .then(response => response.json())
+                .then(data => {
+                    // Update uptime
+                    document.getElementById('uptime').textContent = formatTime(data.uptime);
+                    
+                    // Update activities
+                    const activitiesHtml = data.activities.map(activity => 
+                        `<div class="activity-item">
+                            ${activity.message} (${formatTime(Math.floor(Date.now()/1000 - activity.timestamp))} ago)
+                         </div>`
+                    ).join('');
+                    document.getElementById('activities').innerHTML = activitiesHtml;
+                    
+                    // Update status indicators
+                    document.getElementById('detectStatus').textContent = data.face_detect ? 'ON' : 'OFF';
+                    document.getElementById('recognizeStatus').textContent = data.face_recognize ? 'ON' : 'OFF';
+                    
+                    // Update camera settings in modal
+                    document.getElementById('framesize').value = data.framesize;
+                    document.getElementById('quality').value = data.quality;
+                    document.getElementById('brightness').value = data.brightness;
+                    document.getElementById('contrast').value = data.contrast;
+                });
+        }
+
+        // Update status every 5 seconds
+        setInterval(updateStatus, 5000);
+        updateStatus(); // Initial update
 
         // Check authentication status periodically
         function checkAuth() {
@@ -450,233 +616,3 @@ const char REGISTRATION_HTML[] = R"rawliteral(
 </html>
 )rawliteral";
 
-const char CAMERA_CONFIG_HTML[] = R"rawliteral(
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>ESP32-CAM Configuration</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 20px;
-                text-align: center;
-                background-color: #f0f0f0;
-            }
-            .container {
-                max-width: 800px;
-                margin: 0 auto;
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-            }
-            .config-section {
-                margin: 20px 0;
-                text-align: left;
-                padding: 15px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            .config-item {
-                margin: 10px 0;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            }
-            select, input[type="range"] {
-                width: 200px;
-                margin-left: 10px;
-            }
-            button {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                margin: 5px;
-            }
-            button:hover {
-                background-color: #45a049;
-            }
-            .back-button {
-                background-color: #666;
-            }
-            .value-display {
-                min-width: 40px;
-                display: inline-block;
-                text-align: right;
-                margin-left: 10px;
-            }
-            .preview-container {
-                margin: 20px 0;
-                text-align: center;
-            }
-            #stream {
-                width: 100%;
-                max-width: 400px;
-                height: auto;
-                border-radius: 4px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Camera Configuration</h1>
-                <button class="back-button" onclick="window.location.href='/dashboard'">Back to Dashboard</button>
-            </div>
-    
-            <div class="preview-container">
-                <h3>Live Preview</h3>
-                <img id="stream" src="" alt="Loading camera stream...">
-            </div>
-    
-            <div class="config-section">
-                <h2>Image Settings</h2>
-                <div class="config-item">
-                    <label>Frame Size:</label>
-                    <select id="framesize" onchange="updateValue('framesize', this.value)">
-                        <option value="0">QQVGA (160x120)</option>
-                        <option value="1">QVGA (320x240)</option>
-                        <option value="2">VGA (640x480)</option>
-                        <option value="3">SVGA (800x600)</option>
-                        <option value="4">XGA (1024x768)</option>
-                        <option value="5">SXGA (1280x1024)</option>
-                    </select>
-                </div>
-                <div class="config-item">
-                    <label>Quality (0-63):</label>
-                    <input type="range" id="quality" min="0" max="63" onchange="updateValue('quality', this.value)">
-                    <span id="quality-val" class="value-display">10</span>
-                </div>
-            </div>
-    
-            <div class="config-section">
-                <h2>Camera Adjustments</h2>
-                <div class="config-item">
-                    <label>Brightness (-2 to 2):</label>
-                    <input type="range" id="brightness" min="-2" max="2" step="1" onchange="updateValue('brightness', this.value)">
-                    <span id="brightness-val" class="value-display">0</span>
-                </div>
-                <div class="config-item">
-                    <label>Contrast (-2 to 2):</label>
-                    <input type="range" id="contrast" min="-2" max="2" step="1" onchange="updateValue('contrast', this.value)">
-                    <span id="contrast-val" class="value-display">0</span>
-                </div>
-                <div class="config-item">
-                    <label>Saturation (-2 to 2):</label>
-                    <input type="range" id="saturation" min="-2" max="2" step="1" onchange="updateValue('saturation', this.value)">
-                    <span id="saturation-val" class="value-display">0</span>
-                </div>
-            </div>
-    
-            <div class="config-section">
-                <h2>Special Effects</h2>
-                <div class="config-item">
-                    <label>Effect:</label>
-                    <select id="special_effect" onchange="updateValue('special_effect', this.value)">
-                        <option value="0">No Effect</option>
-                        <option value="1">Negative</option>
-                        <option value="2">Grayscale</option>
-                        <option value="3">Red Tint</option>
-                        <option value="4">Green Tint</option>
-                        <option value="5">Blue Tint</option>
-                        <option value="6">Sepia</option>
-                    </select>
-                </div>
-            </div>
-    
-            <div class="config-section">
-                <h2>Camera Controls</h2>
-                <div class="config-item">
-                    <label>AWB (Auto White Balance):</label>
-                    <input type="checkbox" id="awb" onchange="updateValue('awb', this.checked ? 1 : 0)">
-                </div>
-                <div class="config-item">
-                    <label>AWB Gain:</label>
-                    <input type="checkbox" id="awb_gain" onchange="updateValue('awb_gain', this.checked ? 1 : 0)">
-                </div>
-                <div class="config-item">
-                    <label>Horizontal Mirror:</label>
-                    <input type="checkbox" id="hmirror" onchange="updateValue('hmirror', this.checked ? 1 : 0)">
-                </div>
-                <div class="config-item">
-                    <label>Vertical Flip:</label>
-                    <input type="checkbox" id="vflip" onchange="updateValue('vflip', this.checked ? 1 : 0)">
-                </div>
-            </div>
-        </div>
-    
-        <script>
-            var baseHost = document.location.origin;
-            var streamUrl = baseHost + ':81/stream';
-    
-            document.getElementById('stream').src = streamUrl;
-    
-            // Initialize settings
-            window.onload = function() {
-                fetchCameraStatus();
-            }
-    
-            function fetchCameraStatus() {
-                fetch(baseHost + '/status')
-                    .then(response => response.json())
-                    .then(data => {
-                        // Update all input values based on current camera status
-                        document.getElementById('framesize').value = data.framesize;
-                        document.getElementById('quality').value = data.quality;
-                        document.getElementById('quality-val').textContent = data.quality;
-                        document.getElementById('brightness').value = data.brightness;
-                        document.getElementById('brightness-val').textContent = data.brightness;
-                        document.getElementById('contrast').value = data.contrast;
-                        document.getElementById('contrast-val').textContent = data.contrast;
-                        document.getElementById('saturation').value = data.saturation;
-                        document.getElementById('saturation-val').textContent = data.saturation;
-                        document.getElementById('special_effect').value = data.special_effect;
-                        document.getElementById('awb').checked = data.awb == 1;
-                        document.getElementById('awb_gain').checked = data.awb_gain == 1;
-                        document.getElementById('hmirror').checked = data.hmirror == 1;
-                        document.getElementById('vflip').checked = data.vflip == 1;
-                    });
-            }
-    
-            function updateValue(variable, value) {
-                fetch(baseHost + `/control?var=${variable}&val=${value}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            console.error('Failed to update:', variable);
-                            return;
-                        }
-                        // Update value display if exists
-                        const displayElement = document.getElementById(variable + '-val');
-                        if (displayElement) {
-                            displayElement.textContent = value;
-                        }
-                    })
-                    .catch(error => console.error('Error:', error));
-            }
-    
-            // Check authentication status periodically
-            function checkAuth() {
-                fetch(baseHost + '/check-auth')
-                    .then(response => {
-                        if (!response.ok) {
-                            window.location.href = '/';
-                        }
-                    });
-                setTimeout(checkAuth, 30000);
-            }
-    
-            checkAuth();
-        </script>
-    </body>
-    </html>
-    )rawliteral";
