@@ -176,9 +176,9 @@ const char LOGIN_HTML[] = R"rawliteral(
         </script>
     </body>
     </html>
-    )rawliteral";
-    
-    const char DASHBOARD_HTML[] = R"rawliteral(
+)rawliteral";
+
+const char DASHBOARD_HTML[] = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -216,7 +216,7 @@ const char LOGIN_HTML[] = R"rawliteral(
         }
         .dashboard-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: 1fr 2fr;
             gap: 25px;
             margin-bottom: 25px;
         }
@@ -245,6 +245,8 @@ const char LOGIN_HTML[] = R"rawliteral(
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            max-width: 480px;
+            margin: 0 auto;
         }
         #stream {
             width: 100%;
@@ -357,20 +359,51 @@ const char LOGIN_HTML[] = R"rawliteral(
         }
         /* User Management Modal Specific Styles */
         #addUserModal .modal-content {
-            max-width: 500px;
+            max-width: 800px;
         }
         .user-form {
-            grid-template-columns: 1fr;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
         }
-        .user-form input {
-            width: 100%;
-            box-sizing: border-box;
-            margin-bottom: 10px;
+        .user-form-inputs {
+            padding: 20px;
         }
-        .error-message {
-            color: #e74c3c;
-            margin-top: 10px;
-            font-size: 14px;
+        .user-form-camera {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .user-form-camera .video-container {
+            max-width: 320px;
+            margin-bottom: 15px;
+        }
+        .enrollment-controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .enrollment-status {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-badge.active {
+            background: #2ecc71;
+            color: white;
+        }
+        .status-badge.inactive {
+            background: #e74c3c;
+            color: white;
         }
     </style>
 </head>
@@ -453,13 +486,29 @@ const char LOGIN_HTML[] = R"rawliteral(
             <span class="close" onclick="closeAddUserModal()">&times;</span>
             <h2>Add New User</h2>
             <div class="user-form">
-                <input type="text" id="newUsername" placeholder="Username" required>
-                <input type="password" id="newPassword" placeholder="Password" required>
-                <input type="email" id="newEmail" placeholder="Email Address" required>
-                <input type="tel" id="newPhone" placeholder="Phone Number (for SMS alerts)" required>
-                <button onclick="addNewUser()">Add User</button>
+                <div class="user-form-inputs">
+                    <input type="text" id="newUsername" placeholder="Username" required>
+                    <input type="password" id="newPassword" placeholder="Password" required>
+                    <input type="email" id="newEmail" placeholder="Email Address" required>
+                    <input type="tel" id="newPhone" placeholder="Phone Number (for SMS alerts)" required>
+                </div>
+                <div class="user-form-camera">
+                    <h3>Face Enrollment</h3>
+                    <div class="video-container">
+                        <img id="enrollStream" src="" alt="Loading camera stream...">
+                    </div>
+                    <div class="enrollment-controls">
+                        <button onclick="toggleEnrollmentDetection()">Face Detection</button>
+                        <button onclick="startFaceEnrollment()">Start Enrollment</button>
+                    </div>
+                    <div class="enrollment-status">
+                        <span class="status-badge" id="enrollDetectStatus">Detection: OFF</span>
+                        <span class="status-badge" id="enrollProgress">Not Started</span>
+                    </div>
+                </div>
             </div>
             <div id="addUserError" class="error-message"></div>
+            <button onclick="addNewUser()" style="margin-top: 20px;">Add User</button>
         </div>
     </div>
 
@@ -578,9 +627,13 @@ const char LOGIN_HTML[] = R"rawliteral(
 
         checkAuth();
 
-        // Add these new functions for user management
+        // Add these new functions for face enrollment
+        var enrollmentDetection = false;
+        var enrollmentActive = false;
+        
         function openAddUserModal() {
             document.getElementById('addUserModal').style.display = 'block';
+            document.getElementById('enrollStream').src = streamUrl;
         }
 
         function closeAddUserModal() {
@@ -591,6 +644,60 @@ const char LOGIN_HTML[] = R"rawliteral(
             document.getElementById('newPassword').value = '';
             document.getElementById('newEmail').value = '';
             document.getElementById('newPhone').value = '';
+            // Stop face detection and enrollment
+            if (enrollmentDetection) toggleEnrollmentDetection();
+            if (enrollmentActive) stopFaceEnrollment();
+        }
+
+        function toggleEnrollmentDetection() {
+            enrollmentDetection = !enrollmentDetection;
+            fetch(baseHost + '/control?var=face_detect&val=' + (enrollmentDetection ? '1' : '0'))
+                .then(response => {
+                    const status = document.getElementById('enrollDetectStatus');
+                    status.textContent = 'Detection: ' + (enrollmentDetection ? 'ON' : 'OFF');
+                    status.className = 'status-badge ' + (enrollmentDetection ? 'active' : 'inactive');
+                });
+        }
+
+        function startFaceEnrollment() {
+            if (!enrollmentDetection) {
+                document.getElementById('addUserError').textContent = 'Please enable face detection first';
+                return;
+            }
+
+            enrollmentActive = true;
+            document.getElementById('enrollProgress').textContent = 'Enrolling...';
+            document.getElementById('enrollProgress').className = 'status-badge active';
+
+            fetch(baseHost + '/control?var=face_enroll&val=1')
+                .then(response => response.text())
+                .then(() => {
+                    checkEnrollmentStatus();
+                });
+        }
+
+        function stopFaceEnrollment() {
+            enrollmentActive = false;
+            fetch(baseHost + '/control?var=face_enroll&val=0')
+                .then(() => {
+                    document.getElementById('enrollProgress').textContent = 'Not Started';
+                    document.getElementById('enrollProgress').className = 'status-badge inactive';
+                });
+        }
+
+        function checkEnrollmentStatus() {
+            if (!enrollmentActive) return;
+
+            fetch(baseHost + '/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.face_enrolled) {
+                        document.getElementById('enrollProgress').textContent = 'Completed';
+                        enrollmentActive = false;
+                    } else {
+                        setTimeout(checkEnrollmentStatus, 1000);
+                    }
+                });
         }
 
         function addNewUser() {
@@ -611,6 +718,11 @@ const char LOGIN_HTML[] = R"rawliteral(
 
             if (!phone.match(/^\+?[\d\s-]+$/)) {
                 document.getElementById('addUserError').textContent = 'Please enter a valid phone number';
+                return;
+            }
+
+            if (!document.getElementById('enrollProgress').textContent.includes('Completed')) {
+                document.getElementById('addUserError').textContent = 'Please complete face enrollment first';
                 return;
             }
 
@@ -639,8 +751,8 @@ const char LOGIN_HTML[] = R"rawliteral(
 </body>
 </html>
 )rawliteral";
-    
-    const char REGISTRATION_HTML[] = R"rawliteral(
+
+const char REGISTRATION_HTML[] = R"rawliteral(
     <!DOCTYPE html>
     <html>
     <head>
