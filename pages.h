@@ -179,10 +179,472 @@ const char LOGIN_HTML[] = R"rawliteral(
     )rawliteral";
     
     const char DASHBOARD_HTML[] = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32-CAM Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        h1 {
+            margin: 0;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .status-item {
+            background: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            text-align: center;
+        }
+        .status-item span {
+            display: block;
+            font-size: 1.2em;
+            font-weight: 500;
+            color: #3498db;
+            margin-top: 5px;
+        }
+        .video-container {
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        #stream {
+            width: 100%;
+            display: block;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        button.logout {
+            background: #e74c3c;
+        }
+        button.logout:hover {
+            background: #c0392b;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .activity-log {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            height: 300px;
+            overflow-y: auto;
+        }
+        .activity-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            color: #34495e;
+            font-size: 14px;
+        }
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 15px;
+            position: relative;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+        }
+        .close {
+            position: absolute;
+            right: 25px;
+            top: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #666;
+            transition: color 0.3s;
+        }
+        .close:hover {
+            color: #000;
+        }
+        .settings-grid, .user-form {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .setting-item label {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        .setting-item select, .setting-item input, .user-form input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .setting-item input[type="range"] {
+            width: 100%;
+        }
+        /* User Management Modal Specific Styles */
+        #addUserModal .modal-content {
+            max-width: 500px;
+        }
+        .user-form {
+            grid-template-columns: 1fr;
+        }
+        .user-form input {
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ESP32-CAM Dashboard</h1>
+            <button class="logout" onclick="logout()">Logout</button>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                System Uptime: <span id="uptime">0s</span>
+            </div>
+            <div class="status-item">
+                Face Detection: <span id="detectStatus">OFF</span>
+            </div>
+            <div class="status-item">
+                Face Recognition: <span id="recognizeStatus">OFF</span>
+            </div>
+        </div>
+
+        <div class="video-container">
+            <img id="stream" src="" alt="Loading camera stream...">
+        </div>
+
+        <div class="controls">
+            <button onclick="toggleDetection()">Toggle Face Detection</button>
+            <button onclick="toggleRecognition()">Toggle Face Recognition</button>
+            <button onclick="capturePhoto()">Capture Photo</button>
+            <button onclick="openSettings()">Camera Settings</button>
+            <button onclick="openAddUserModal()">Add User</button>
+        </div>
+
+        <div class="activity-log">
+            <h3>Recent Activities</h3>
+            <div id="activities"></div>
+        </div>
+    </div>
+
+    <!-- Camera Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeSettings()">&times;</span>
+            <h2>Camera Settings</h2>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <label for="framesize">Resolution</label>
+                    <select id="framesize" onchange="updateCameraSetting('framesize', this.value)">
+                        <option value="0">QQVGA(160x120)</option>
+                        <option value="3">HQVGA(240x176)</option>
+                        <option value="4">QVGA(320x240)</option>
+                        <option value="5">CIF(400x296)</option>
+                        <option value="6">VGA(640x480)</option>
+                        <option value="8">SVGA(800x600)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="quality">Quality</label>
+                    <input type="range" id="quality" min="4" max="63" value="10" 
+                           onchange="updateCameraSetting('quality', this.value)">
+                </div>
+                <div class="setting-item">
+                    <label for="brightness">Brightness</label>
+                    <input type="range" id="brightness" min="-2" max="2" value="0" 
+                           onchange="updateCameraSetting('brightness', this.value)">
+                </div>
+                <div class="setting-item">
+                    <label for="contrast">Contrast</label>
+                    <input type="range" id="contrast" min="-2" max="2" value="0" 
+                           onchange="updateCameraSetting('contrast', this.value)">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="addUserModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddUserModal()">&times;</span>
+            <h2>Add New User</h2>
+            <div class="user-form">
+                <input type="text" id="newUsername" placeholder="Username" required>
+                <input type="password" id="newPassword" placeholder="Password" required>
+                <input type="email" id="newEmail" placeholder="Email Address" required>
+                <input type="tel" id="newPhone" placeholder="Phone Number (for SMS alerts)" required>
+                <button onclick="addNewUser()">Add User</button>
+            </div>
+            <div id="addUserError" class="error-message"></div>
+        </div>
+    </div>
+
+    <script>
+        var baseHost = document.location.origin;
+        var streamUrl = baseHost + ':81/stream';
+        var detection = false;
+        var recognition = false;
+
+        document.getElementById('stream').src = streamUrl;
+
+        // Settings Modal
+        function openSettings() {
+            document.getElementById('settingsModal').style.display = 'block';
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('settingsModal')) {
+                closeSettings();
+            }
+            if (event.target == document.getElementById('addUserModal')) {
+                closeAddUserModal();
+            }
+        }
+
+        function updateCameraSetting(setting, value) {
+            fetch(baseHost + '/control?var=' + setting + '&val=' + value)
+                .then(response => response.text())
+                .catch(error => console.error('Error:', error));
+        }
+
+        function toggleDetection() {
+            detection = !detection;
+            fetch(baseHost + '/control?var=face_detect&val=' + (detection ? '1' : '0'))
+                .then(response => {
+                    document.getElementById('detectStatus').textContent = detection ? 'ON' : 'OFF';
+                });
+        }
+
+        function toggleRecognition() {
+            recognition = !recognition;
+            fetch(baseHost + '/control?var=face_recognize&val=' + (recognition ? '1' : '0'))
+                .then(response => {
+                    document.getElementById('recognizeStatus').textContent = recognition ? 'ON' : 'OFF';
+                });
+        }
+
+        function capturePhoto() {
+            window.open(baseHost + '/capture');
+        }
+
+        function logout() {
+            fetch(baseHost + '/logout')
+                .then(() => {
+                    window.location.href = '/';
+                });
+        }
+
+        function formatTime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            
+            if (days > 0) return `${days}d ${hours}h ${minutes}m ${secs}s`;
+            if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+            if (minutes > 0) return `${minutes}m ${secs}s`;
+            return `${secs}s`;
+        }
+
+        function updateStatus() {
+            fetch(baseHost + '/status')
+                .then(response => response.json())
+                .then(data => {
+                    // Update uptime
+                    document.getElementById('uptime').textContent = formatTime(data.uptime);
+                    
+                    // Update activities
+                    const activitiesHtml = data.activities.map(activity => 
+                        `<div class="activity-item">
+                            ${activity.message} (${formatTime(Math.floor(Date.now()/1000 - activity.timestamp))} ago)
+                         </div>`
+                    ).join('');
+                    document.getElementById('activities').innerHTML = activitiesHtml;
+                    
+                    // Update status indicators
+                    document.getElementById('detectStatus').textContent = data.face_detect ? 'ON' : 'OFF';
+                    document.getElementById('recognizeStatus').textContent = data.face_recognize ? 'ON' : 'OFF';
+                    
+                    // Update camera settings in modal
+                    document.getElementById('framesize').value = data.framesize;
+                    document.getElementById('quality').value = data.quality;
+                    document.getElementById('brightness').value = data.brightness;
+                    document.getElementById('contrast').value = data.contrast;
+                });
+        }
+
+        // Update status every 5 seconds
+        setInterval(updateStatus, 5000);
+        updateStatus(); // Initial update
+
+        // Check authentication status periodically
+        function checkAuth() {
+            fetch(baseHost + '/check-auth')
+                .then(response => {
+                    if (!response.ok) {
+                        window.location.href = '/';
+                    }
+                });
+            setTimeout(checkAuth, 30000); // Check every 30 seconds
+        }
+
+        checkAuth();
+
+        // Add these new functions for user management
+        function openAddUserModal() {
+            document.getElementById('addUserModal').style.display = 'block';
+        }
+
+        function closeAddUserModal() {
+            document.getElementById('addUserModal').style.display = 'none';
+            document.getElementById('addUserError').textContent = '';
+            // Clear form
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('newEmail').value = '';
+            document.getElementById('newPhone').value = '';
+        }
+
+        function addNewUser() {
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            const email = document.getElementById('newEmail').value;
+            const phone = document.getElementById('newPhone').value;
+            
+            if (!username || !password || !email || !phone) {
+                document.getElementById('addUserError').textContent = 'Please fill in all fields';
+                return;
+            }
+
+            if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                document.getElementById('addUserError').textContent = 'Please enter a valid email address';
+                return;
+            }
+
+            if (!phone.match(/^\+?[\d\s-]+$/)) {
+                document.getElementById('addUserError').textContent = 'Please enter a valid phone number';
+                return;
+            }
+
+            fetch(baseHost + '/register/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password, email, phone })
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert('User added successfully!');
+                    closeAddUserModal();
+                } else if (response.status === 503) {
+                    document.getElementById('addUserError').textContent = 'Maximum number of users reached';
+                } else {
+                    document.getElementById('addUserError').textContent = 'Failed to add user';
+                }
+            })
+            .catch(error => {
+                document.getElementById('addUserError').textContent = 'Failed to add user';
+            });
+        }
+    </script>
+</body>
+</html>
+)rawliteral";
+    
+    const char REGISTRATION_HTML[] = R"rawliteral(
     <!DOCTYPE html>
     <html>
     <head>
-        <title>ESP32-CAM Dashboard</title>
+        <title>ESP32-CAM Registration</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {
@@ -199,143 +661,27 @@ const char LOGIN_HTML[] = R"rawliteral(
                 border-radius: 8px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }
-            .header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-            }
-            .video-container {
-                margin: 20px 0;
-            }
-            #stream {
-                width: 100%;
-                max-width: 800px;
-                height: auto;
-                border-radius: 4px;
-            }
-            button {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                margin: 5px;
-            }
-            button.logout {
-                background-color: #f44336;
-            }
-            .controls {
-                display: flex;
-                flex-wrap: wrap;
-                justify-content: center;
-                gap: 10px;
-                margin: 20px 0;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>ESP32-CAM Dashboard</h1>
-                <button class="logout" onclick="logout()">Logout</button>
-            </div>
-    
-            <div class="video-container">
-                <img id="stream" src="" alt="Loading camera stream...">
-            </div>
-    
-            <div class="controls">
-                <button onclick="toggleDetection()">Face Detection: <span id="detectStatus">OFF</span></button>
-                <button onclick="toggleRecognition()">Face Recognition: <span id="recognizeStatus">OFF</span></button>
-                <button onclick="capturePhoto()">Capture Photo</button>
-            </div>
-        </div>
-    
-        <script>
-            var baseHost = document.location.origin;
-            var streamUrl = baseHost + ':81/stream';
-            var detection = false;
-            var recognition = false;
-    
-            document.getElementById('stream').src = streamUrl;
-    
-            function toggleDetection() {
-                detection = !detection;
-                fetch(baseHost + '/control?var=face_detect&val=' + (detection ? '1' : '0'))
-                    .then(response => {
-                        document.getElementById('detectStatus').textContent = detection ? 'ON' : 'OFF';
-                    });
-            }
-    
-            function toggleRecognition() {
-                recognition = !recognition;
-                fetch(baseHost + '/control?var=face_recognize&val=' + (recognition ? '1' : '0'))
-                    .then(response => {
-                        document.getElementById('recognizeStatus').textContent = recognition ? 'ON' : 'OFF';
-                    });
-            }
-    
-            function capturePhoto() {
-                window.open(baseHost + '/capture');
-            }
-    
-            function logout() {
-                fetch(baseHost + '/logout')
-                    .then(() => {
-                        window.location.href = '/';
-                    });
-            }
-    
-            // Check authentication status periodically
-            function checkAuth() {
-                fetch(baseHost + '/check-auth')
-                    .then(response => {
-                        if (!response.ok) {
-                            window.location.href = '/';
-                        }
-                    });
-                setTimeout(checkAuth, 30000); // Check every 30 seconds
-            }
-    
-            checkAuth();
-        </script>
-    </body>
-    </html>
-    )rawliteral";
-    
-    const char REGISTRATION_HTML[] = R"rawliteral(
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>ESP32-CAM Registration</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 20px;
-                text-align: center;
-            }
-            .container {
-                max-width: 800px;
-                margin: 0 auto;
-            }
             .form-group {
                 margin: 15px 0;
             }
-            input[type="text"], input[type="password"] {
+            input[type="text"], input[type="password"], input[type="email"], input[type="tel"] {
                 width: 100%;
                 padding: 8px;
                 margin: 5px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
             }
             button {
                 background-color: #4CAF50;
                 color: white;
                 padding: 10px 20px;
                 border: none;
+                border-radius: 4px;
                 cursor: pointer;
                 margin: 5px;
+            }
+            button:hover {
+                background-color: #45a049;
             }
             .video-container {
                 margin: 20px 0;
@@ -344,12 +690,17 @@ const char LOGIN_HTML[] = R"rawliteral(
                 width: 100%;
                 max-width: 800px;
                 height: auto;
+                border-radius: 4px;
             }
             .toggle-container {
                 display: flex;
                 justify-content: center;
                 gap: 10px;
                 margin: 15px 0;
+            }
+            .error-message {
+                color: red;
+                margin: 10px 0;
             }
         </style>
     </head>
@@ -363,6 +714,12 @@ const char LOGIN_HTML[] = R"rawliteral(
             <div class="form-group">
                 <input type="password" id="password" placeholder="Password" required>
             </div>
+            <div class="form-group">
+                <input type="email" id="email" placeholder="Email Address" required>
+            </div>
+            <div class="form-group">
+                <input type="tel" id="phone" placeholder="Phone Number (for SMS alerts)" required>
+            </div>
             
             <div class="toggle-container">
                 <button onclick="toggleDetection()">Face Detection: <span id="detectStatus">OFF</span></button>
@@ -375,6 +732,7 @@ const char LOGIN_HTML[] = R"rawliteral(
             </div>
     
             <button onclick="registerUser()">Register</button>
+            <div id="errorMessage" class="error-message"></div>
         </div>
     
         <script>
@@ -413,14 +771,26 @@ const char LOGIN_HTML[] = R"rawliteral(
             function registerUser() {
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
+                const email = document.getElementById('email').value;
+                const phone = document.getElementById('phone').value;
                 
-                if (!username || !password) {
-                    alert('Please fill in all fields');
+                if (!username || !password || !email || !phone) {
+                    document.getElementById('errorMessage').textContent = 'Please fill in all fields';
+                    return;
+                }
+
+                if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                    document.getElementById('errorMessage').textContent = 'Please enter a valid email address';
+                    return;
+                }
+
+                if (!phone.match(/^\+?[\d\s-]+$/)) {
+                    document.getElementById('errorMessage').textContent = 'Please enter a valid phone number';
                     return;
                 }
     
                 if (!enrollment) {
-                    alert('Please enable face enrollment and look at the camera');
+                    document.getElementById('errorMessage').textContent = 'Please enable face enrollment and look at the camera';
                     return;
                 }
     
@@ -429,23 +799,23 @@ const char LOGIN_HTML[] = R"rawliteral(
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, password, email, phone })
                 })
                 .then(response => {
                     if (response.ok) {
                         alert('Registration successful! You can now login.');
                         window.location.href = '/';
                     } else if (response.status === 503) {
-                        alert('Maximum number of users reached');
+                        document.getElementById('errorMessage').textContent = 'Maximum number of users reached';
                     } else {
-                        alert('Registration failed');
+                        document.getElementById('errorMessage').textContent = 'Registration failed';
                     }
                 })
                 .catch(error => {
-                    alert('Registration failed');
+                    document.getElementById('errorMessage').textContent = 'Registration failed';
                 });
             }
         </script>
     </body>
     </html>
-    )rawliteral";
+)rawliteral";

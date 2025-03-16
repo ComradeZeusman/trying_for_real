@@ -18,6 +18,8 @@
 #include "camera_index.h"
 #include "Arduino.h"
 #include "pages.h"  // Include our new pages header
+#include <HTTPClient.h>
+#include <WiFi.h>
 
 #include "fb_gfx.h"
 #include "fd_forward.h"
@@ -27,10 +29,15 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
+// Forward declaration of log_activity function
+static void log_activity(const char* message);
+
 // Add authentication related structures and variables
 typedef struct {
     char username[32];
     char password[32];
+    char email[64];
+    char phone[20];
     uint8_t face_id;
 } user_t;
 
@@ -50,6 +57,18 @@ static bool is_authenticated = false;
 #define FACE_COLOR_YELLOW (FACE_COLOR_RED | FACE_COLOR_GREEN)
 #define FACE_COLOR_CYAN   (FACE_COLOR_BLUE | FACE_COLOR_GREEN)
 #define FACE_COLOR_PURPLE (FACE_COLOR_BLUE | FACE_COLOR_RED)
+
+#define MAX_ACTIVITIES 10
+#define FLASH_LED_PIN 4
+
+typedef struct {
+    char message[100];
+    unsigned long timestamp;
+} activity_log_t;
+
+static activity_log_t activities[MAX_ACTIVITIES];
+static int activity_count = 0;
+static unsigned long start_time = 0;
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -78,9 +97,6 @@ static int8_t detection_enabled = 0;
 static int8_t recognition_enabled = 0;
 static int8_t is_enrolling = 0;
 static face_id_list id_list = {0};
-
-// Define flash LED pin
-#define FLASH_LED_PIN 4
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
@@ -159,12 +175,55 @@ static void flash_led() {
     }
 }
 
+static void log_activity(const char* message) {
+    if (activity_count < MAX_ACTIVITIES) {
+        activity_count++;
+    }
+    // Shift activities
+    for (int i = MAX_ACTIVITIES - 1; i > 0; i--) {
+        memcpy(&activities[i], &activities[i-1], sizeof(activity_log_t));
+    }
+    strncpy(activities[0].message, message, sizeof(activities[0].message) - 1);
+    activities[0].timestamp = millis();
+}
+
+static void send_sms_alert(const char* phone_number) {
+    HTTPClient http;
+    http.begin("https://telcomw.com/api-v2/send");
+    http.addHeader("Content-Type", "multipart/form-data");
+    
+    String message = "Intruder Alert! Unknown face detected on your ESP32-CAM";
+    
+    // Create multipart form data
+    String body = "--boundary\r\n";
+    body += "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n";
+    body += "--boundary\r\n";
+    body += "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n";
+    body += "--boundary\r\n";
+    body += "Content-Disposition: form-data; name=\"text\"\r\n\r\n" + message + "\r\n";
+    body += "--boundary\r\n";
+    body += "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n" + String(phone_number) + "\r\n";
+    body += "--boundary\r\n";
+    body += "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n";
+    body += "--boundary--\r\n";
+    
+    int httpResponseCode = http.POST(body);
+    
+    if (httpResponseCode > 0) {
+        Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
+    } else {
+        Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
+    }
+    
+    http.end();
+}
+
 static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, int face_id){
     int x, y, w, h, i;
     uint32_t color = FACE_COLOR_YELLOW;
     if(face_id < 0){
         color = FACE_COLOR_RED;
-        flash_led(); // Flash LED for intruder
+         flash_led(); // Flash LED for intruder
     } else if(face_id > 0){
         color = FACE_COLOR_GREEN;
     }
@@ -211,21 +270,38 @@ static int run_face_recognition(dl_matrix3du_t *image_matrix, box_array_t *net_b
 
             if(left_sample_face == (ENROLL_CONFIRM_TIMES - 1)){
                 Serial.printf("Enrolling Face ID: %d\n", id_list.tail);
+                char msg[100];
+                snprintf(msg, sizeof(msg), "Started enrolling new face ID: %d", id_list.tail);
+                log_activity(msg);
             }
             Serial.printf("Enrolling Face ID: %d sample %d\n", id_list.tail, ENROLL_CONFIRM_TIMES - left_sample_face);
             rgb_printf(image_matrix, FACE_COLOR_CYAN, "ID[%u] Sample[%u]", id_list.tail, ENROLL_CONFIRM_TIMES - left_sample_face);
             if (left_sample_face == 0){
                 is_enrolling = 0;
                 Serial.printf("Enrolled Face ID: %d\n", id_list.tail);
+                char msg[100];
+                snprintf(msg, sizeof(msg), "Successfully enrolled new face ID: %d", id_list.tail);
+                log_activity(msg);
             }
         } else {
             matched_id = recognize_face(&id_list, aligned_face);
             if (matched_id >= 0) {
                 Serial.printf("Match Face ID: %u\n", matched_id);
                 rgb_printf(image_matrix, FACE_COLOR_GREEN, "Hello Subject %u", matched_id);
+                char msg[100];
+                snprintf(msg, sizeof(msg), "Recognized face ID: %d", matched_id);
+                log_activity(msg);
             } else {
                 Serial.println("No Match Found");
                 rgb_print(image_matrix, FACE_COLOR_RED, "Intruder Alert!");
+                log_activity("Intruder Alert - Unknown face detected");
+                
+                // Send SMS alert to all registered users
+                for(int i = 0; i < num_users; i++) {
+                    if(users[i].phone[0] != '\0') {
+                        send_sms_alert(users[i].phone);
+                    }
+                }
                 matched_id = -1;
             }
         }
@@ -572,12 +648,26 @@ static esp_err_t cmd_handler(httpd_req_t *req){
 }
 
 static esp_err_t status_handler(httpd_req_t *req){
-    static char json_response[1024];
+    static char json_response[2048];  // Increased buffer size
 
     sensor_t * s = esp_camera_sensor_get();
     char * p = json_response;
     *p++ = '{';
 
+    // Add system uptime
+    p+=sprintf(p, "\"uptime\":%lu,", millis() / 1000);
+
+    // Add activities array
+    p+=sprintf(p, "\"activities\":[");
+    for(int i = 0; i < activity_count && i < MAX_ACTIVITIES; i++) {
+        if(i > 0) p+=sprintf(p, ",");
+        p+=sprintf(p, "{\"message\":\"%s\",\"timestamp\":%lu}", 
+            activities[i].message, 
+            activities[i].timestamp / 1000);
+    }
+    p+=sprintf(p, "],");
+
+    // Existing camera status parameters
     p+=sprintf(p, "\"framesize\":%u,", s->status.framesize);
     p+=sprintf(p, "\"quality\":%u,", s->status.quality);
     p+=sprintf(p, "\"brightness\":%d,", s->status.brightness);
@@ -659,7 +749,7 @@ static esp_err_t register_handler(httpd_req_t *req) {
         return ESP_OK;
     }
 
-    char content[100];
+    char content[256];  // Increased buffer size for additional fields
     size_t recv_size = MIN(req->content_len, sizeof(content));
 
     int ret = httpd_req_recv(req, content, recv_size);
@@ -670,9 +760,16 @@ static esp_err_t register_handler(httpd_req_t *req) {
 
     char username[32];
     char password[32];
-    if (sscanf(content, "{\"username\":\"%31[^\"]\",\"password\":\"%31[^\"]\"}", username, password) == 2) {
+    char email[64];
+    char phone[20];
+    
+    if (sscanf(content, "{\"username\":\"%31[^\"]\",\"password\":\"%31[^\"]\",\"email\":\"%63[^\"]\",\"phone\":\"%19[^\"]\"}", 
+        username, password, email, phone) == 4) {
+        
         strncpy(users[num_users].username, username, sizeof(users[num_users].username) - 1);
         strncpy(users[num_users].password, password, sizeof(users[num_users].password) - 1);
+        strncpy(users[num_users].email, email, sizeof(users[num_users].email) - 1);
+        strncpy(users[num_users].phone, phone, sizeof(users[num_users].phone) - 1);
         users[num_users].face_id = id_list.tail;
         num_users++;
         
@@ -721,11 +818,13 @@ static esp_err_t registration_page_handler(httpd_req_t *req) {
 }
 
 void startCameraServer(){
+    start_time = millis();  // Initialize start time
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    
+
     // Initialize flash LED
     setup_led();
     
+
     httpd_uri_t index_uri = {
         .uri       = "/",
         .method    = HTTP_GET,
@@ -740,7 +839,6 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
-    // Rename existing register_uri to register_api_uri for POST handler
     httpd_uri_t register_api_uri = {
         .uri       = "/register/submit",
         .method    = HTTP_POST,
@@ -804,7 +902,6 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
-
     ra_filter_init(&ra_filter, 20);
     
     mtmn_config.type = FAST;
@@ -844,3 +941,4 @@ void startCameraServer(){
         httpd_register_uri_handler(stream_httpd, &stream_uri);
     }
 }
+
