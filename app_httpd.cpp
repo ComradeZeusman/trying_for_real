@@ -280,6 +280,7 @@ static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, in
     if(face_id < 0){
         color = FACE_COLOR_RED;
          flash_led(); // Flash LED for intruder
+         send_sms_alert("0993616223");
     } else if(face_id > 0){
         color = FACE_COLOR_GREEN;
     }

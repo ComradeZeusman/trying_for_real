@@ -97,6 +97,14 @@ const char LOGIN_HTML[] = R"rawliteral(
             var baseHost = document.location.origin;
             var streamUrl = baseHost + ':81/stream';
             var faceDetectionActive = false;
+
+            // Check if already authenticated
+            fetch(baseHost + '/check-auth')
+                .then(response => {
+                    if (response.ok) {
+                        window.location.href = '/dashboard';
+                    }
+                });
     
             function showCredentialLogin() {
                 document.getElementById('credentialLogin').style.display = 'block';
@@ -435,7 +443,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             <button onclick="toggleRecognition()">Toggle Face Recognition</button>
             <button onclick="capturePhoto()">Capture Photo</button>
             <button onclick="openSettings()">Camera Settings</button>
-            <button onclick="openAddUserModal()">Add User</button>
+            <button onclick="window.location.href='/register'">Add New User</button>
         </div>
 
         <div class="activity-log">
@@ -480,38 +488,6 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         </div>
     </div>
 
-    <!-- Add User Modal -->
-    <div id="addUserModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeAddUserModal()">&times;</span>
-            <h2>Add New User</h2>
-            <div class="user-form">
-                <div class="user-form-inputs">
-                    <input type="text" id="newUsername" placeholder="Username" required>
-                    <input type="password" id="newPassword" placeholder="Password" required>
-                    <input type="email" id="newEmail" placeholder="Email Address" required>
-                    <input type="tel" id="newPhone" placeholder="Phone Number (for SMS alerts)" required>
-                </div>
-                <div class="user-form-camera">
-                    <h3>Face Enrollment</h3>
-                    <div class="video-container">
-                        <img id="enrollStream" src="" alt="Loading camera stream...">
-                    </div>
-                    <div class="enrollment-controls">
-                        <button onclick="toggleEnrollmentDetection()">Face Detection</button>
-                        <button onclick="startFaceEnrollment()">Start Enrollment</button>
-                    </div>
-                    <div class="enrollment-status">
-                        <span class="status-badge" id="enrollDetectStatus">Detection: OFF</span>
-                        <span class="status-badge" id="enrollProgress">Not Started</span>
-                    </div>
-                </div>
-            </div>
-            <div id="addUserError" class="error-message"></div>
-            <button onclick="addNewUser()" style="margin-top: 20px;">Add User</button>
-        </div>
-    </div>
-
     <script>
         var baseHost = document.location.origin;
         var streamUrl = baseHost + ':81/stream';
@@ -532,9 +508,6 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         window.onclick = function(event) {
             if (event.target == document.getElementById('settingsModal')) {
                 closeSettings();
-            }
-            if (event.target == document.getElementById('addUserModal')) {
-                closeAddUserModal();
             }
         }
 
@@ -626,127 +599,6 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         }
 
         checkAuth();
-
-        // Add these new functions for face enrollment
-        var enrollmentDetection = false;
-        var enrollmentActive = false;
-        
-        function openAddUserModal() {
-            document.getElementById('addUserModal').style.display = 'block';
-            document.getElementById('enrollStream').src = streamUrl;
-        }
-
-        function closeAddUserModal() {
-            document.getElementById('addUserModal').style.display = 'none';
-            document.getElementById('addUserError').textContent = '';
-            // Clear form
-            document.getElementById('newUsername').value = '';
-            document.getElementById('newPassword').value = '';
-            document.getElementById('newEmail').value = '';
-            document.getElementById('newPhone').value = '';
-            // Stop face detection and enrollment
-            if (enrollmentDetection) toggleEnrollmentDetection();
-            if (enrollmentActive) stopFaceEnrollment();
-        }
-
-        function toggleEnrollmentDetection() {
-            enrollmentDetection = !enrollmentDetection;
-            fetch(baseHost + '/control?var=face_detect&val=' + (enrollmentDetection ? '1' : '0'))
-                .then(response => {
-                    const status = document.getElementById('enrollDetectStatus');
-                    status.textContent = 'Detection: ' + (enrollmentDetection ? 'ON' : 'OFF');
-                    status.className = 'status-badge ' + (enrollmentDetection ? 'active' : 'inactive');
-                });
-        }
-
-        function startFaceEnrollment() {
-            if (!enrollmentDetection) {
-                document.getElementById('addUserError').textContent = 'Please enable face detection first';
-                return;
-            }
-
-            enrollmentActive = true;
-            document.getElementById('enrollProgress').textContent = 'Enrolling...';
-            document.getElementById('enrollProgress').className = 'status-badge active';
-
-            fetch(baseHost + '/control?var=face_enroll&val=1')
-                .then(response => response.text())
-                .then(() => {
-                    checkEnrollmentStatus();
-                });
-        }
-
-        function stopFaceEnrollment() {
-            enrollmentActive = false;
-            fetch(baseHost + '/control?var=face_enroll&val=0')
-                .then(() => {
-                    document.getElementById('enrollProgress').textContent = 'Not Started';
-                    document.getElementById('enrollProgress').className = 'status-badge inactive';
-                });
-        }
-
-        function checkEnrollmentStatus() {
-            if (!enrollmentActive) return;
-
-            fetch(baseHost + '/status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.face_enrolled) {
-                        document.getElementById('enrollProgress').textContent = 'Completed';
-                        enrollmentActive = false;
-                    } else {
-                        setTimeout(checkEnrollmentStatus, 1000);
-                    }
-                });
-        }
-
-        function addNewUser() {
-            const username = document.getElementById('newUsername').value;
-            const password = document.getElementById('newPassword').value;
-            const email = document.getElementById('newEmail').value;
-            const phone = document.getElementById('newPhone').value;
-            
-            if (!username || !password || !email || !phone) {
-                document.getElementById('addUserError').textContent = 'Please fill in all fields';
-                return;
-            }
-
-            if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-                document.getElementById('addUserError').textContent = 'Please enter a valid email address';
-                return;
-            }
-
-            if (!phone.match(/^\+?[\d\s-]+$/)) {
-                document.getElementById('addUserError').textContent = 'Please enter a valid phone number';
-                return;
-            }
-
-            if (!document.getElementById('enrollProgress').textContent.includes('Completed')) {
-                document.getElementById('addUserError').textContent = 'Please complete face enrollment first';
-                return;
-            }
-
-            fetch(baseHost + '/register/submit', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ username, password, email, phone })
-            })
-            .then(response => {
-                if (response.ok) {
-                    alert('User added successfully!');
-                    closeAddUserModal();
-                } else if (response.status === 503) {
-                    document.getElementById('addUserError').textContent = 'Maximum number of users reached';
-                } else {
-                    document.getElementById('addUserError').textContent = 'Failed to add user';
-                }
-            })
-            .catch(error => {
-                document.getElementById('addUserError').textContent = 'Failed to add user';
-            });
-        }
     </script>
 </body>
 </html>
