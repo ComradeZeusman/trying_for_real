@@ -1,6 +1,8 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include "soc/soc.h"   
+#include "soc/rtc_cntl_reg.h"
 
 //
 // WARNING!!! Make sure that you have either selected ESP32 Wrover Module,
@@ -25,6 +27,8 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;

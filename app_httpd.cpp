@@ -60,6 +60,11 @@ static bool is_authenticated = false;
 
 #define MAX_ACTIVITIES 10
 #define FLASH_LED_PIN 4
+#define BUZZER_PIN 2
+#define BUZZER_CHANNEL 1  // Use LEDC channel 1
+#define BUZZER_TIMER 1    // Use LEDC timer 1
+#define BUZZER_FREQ 2000  // Buzzer frequency in Hz
+#define BUZZER_RES 8      // 8-bit resolution
 
 typedef struct {
     char message[100];
@@ -97,6 +102,18 @@ static int8_t detection_enabled = 0;
 static int8_t recognition_enabled = 0;
 static int8_t is_enrolling = 0;
 static face_id_list id_list = {0};
+
+static bool buzzer_active = false;
+static unsigned long last_buzzer_time = 0;
+const unsigned long BUZZER_INTERVAL = 60000;  // 1 minute interval between beeps
+
+// Existing global variables
+static unsigned long last_beep_time = 0;
+static bool beep_state = false;
+const unsigned long BEEP_DURATION = 100;    // 100ms beep duration
+const unsigned long BEEP_INTERVAL = 300;    // 300ms between beeps
+const int NUM_BEEPS = 3;                   // Number of beeps per activation
+static int beep_count = 0;
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
@@ -160,6 +177,34 @@ static int rgb_printf(dl_matrix3du_t *image_matrix, uint32_t color, const char *
     }
     return len;
 }
+static void sound_buzzer() {
+    unsigned long current_time = millis();
+    
+    // Only start new beep if not already active and enough time has passed
+    if (!buzzer_active && current_time - last_buzzer_time >= BUZZER_INTERVAL) {
+        buzzer_active = true;
+        last_buzzer_time = current_time;
+        last_beep_time = current_time;
+        
+        // Start beep
+        ledcSetup(BUZZER_TIMER, BUZZER_FREQ, BUZZER_RES);
+        ledcAttachPin(BUZZER_PIN, BUZZER_CHANNEL);
+        ledcWrite(BUZZER_CHANNEL, 127);
+    }
+}
+
+static void update_buzzer() {
+    if (buzzer_active) {
+        unsigned long current_time = millis();
+        
+        if (current_time - last_beep_time >= BEEP_DURATION) {
+            // Turn off beep
+            ledcWrite(BUZZER_CHANNEL, 0);
+            ledcDetachPin(BUZZER_PIN);
+            buzzer_active = false;
+        }
+    }
+}
 
 static void setup_led() {
     pinMode(FLASH_LED_PIN, OUTPUT);
@@ -173,6 +218,16 @@ static void flash_led() {
         digitalWrite(FLASH_LED_PIN, LOW);
         delay(100);
     }
+}
+void customTone(uint8_t pin, unsigned int frequency) {
+    ledcSetup(BUZZER_TIMER, frequency, BUZZER_RES);
+    ledcAttachPin(pin, BUZZER_CHANNEL);
+    ledcWrite(BUZZER_CHANNEL, 127);
+}
+
+void customNoTone(uint8_t pin) {
+    ledcDetachPin(pin);         // Detach pin from channel
+    digitalWrite(pin, LOW);      // Set pin low
 }
 
 static void log_activity(const char* message) {
@@ -190,24 +245,25 @@ static void log_activity(const char* message) {
 static void send_sms_alert(const char* phone_number) {
     HTTPClient http;
     http.begin("https://telcomw.com/api-v2/send");
-    http.addHeader("Content-Type", "multipart/form-data");
+    http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
     
-    String message = "Intruder Alert! Unknown face detected on your ESP32-CAM";
-    
-    // Create multipart form data
-    String body = "--boundary\r\n";
-    body += "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n";
-    body += "--boundary\r\n";
-    body += "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n";
-    body += "--boundary\r\n";
-    body += "Content-Disposition: form-data; name=\"text\"\r\n\r\n" + message + "\r\n";
-    body += "--boundary\r\n";
-    body += "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n" + String(phone_number) + "\r\n";
-    body += "--boundary\r\n";
-    body += "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n";
-    body += "--boundary--\r\n";
-    
-    int httpResponseCode = http.POST(body);
+    // Use a static buffer to build the body
+    char body[512]; // Adjust size based on your needs
+    snprintf(body, sizeof(body),
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
+        "--boundary--\r\n",
+        phone_number);
+
+    int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
     
     if (httpResponseCode > 0) {
         Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
@@ -224,6 +280,7 @@ static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, in
     if(face_id < 0){
         color = FACE_COLOR_RED;
          flash_led(); // Flash LED for intruder
+         send_sms_alert("0993616223");
     } else if(face_id > 0){
         color = FACE_COLOR_GREEN;
     }
@@ -821,6 +878,8 @@ void startCameraServer(){
     start_time = millis();  // Initialize start time
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
+    config.stack_size = 8192;
+
     // Initialize flash LED
     setup_led();
     
@@ -941,4 +1000,3 @@ void startCameraServer(){
         httpd_register_uri_handler(stream_httpd, &stream_uri);
     }
 }
-
