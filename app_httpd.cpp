@@ -25,6 +25,15 @@
 #include "fd_forward.h"
 #include "fr_forward.h"
 
+// Face tracking variables - these need to be accessible from the main file
+int faceX = -1;  // X coordinate of detected face center, -1 if no face
+int faceY = -1;  // Y coordinate of detected face center
+int faceWidth = 0; // Width of detected face
+int faceHeight = 0; // Height of detected face
+bool faceDetected = false; // Flag to indicate if a face is currently detected
+
+extern void moveServoToTrackFace(); // Forward declaration for function in main file
+
 #ifndef MIN
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
@@ -290,12 +299,30 @@ static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, in
     fb.data = image_matrix->item;
     fb.bytes_per_pixel = 3;
     fb.format = FB_BGR888;
+    
+    // Update face detection status - false by default, set to true if any face is found
+    faceDetected = false;
+    
     for (i = 0; i < boxes->len; i++){
         // rectangle box
         x = (int)boxes->box[i].box_p[0];
         y = (int)boxes->box[i].box_p[1];
         w = (int)boxes->box[i].box_p[2] - x + 1;
         h = (int)boxes->box[i].box_p[3] - y + 1;
+        
+        // Store face position data for servo tracking
+        // Only track the first face (i==0) if multiple faces are detected
+        if (i == 0) {
+            faceX = x + w/2;  // Center X of face
+            faceY = y + h/2;  // Center Y of face
+            faceWidth = w;
+            faceHeight = h;
+            faceDetected = true;
+            
+            // Call the face tracking function to move the servo
+            moveServoToTrackFace();
+        }
+        
         fb_gfx_drawFastHLine(&fb, x, y, w, color);
         fb_gfx_drawFastHLine(&fb, x, y+h-1, w, color);
         fb_gfx_drawFastVLine(&fb, x, y, h, color);

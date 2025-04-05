@@ -3,11 +3,18 @@
 #include <HTTPClient.h>
 #include "soc/soc.h"   
 #include "soc/rtc_cntl_reg.h"
-
+#include <ESP32Servo.h>
 //
 // WARNING!!! Make sure that you have either selected ESP32 Wrover Module,
 //            or another board which has PSRAM enabled
 //
+
+// Face tracking variables defined in app_httpd.cpp
+extern int faceX;       // X coordinate of detected face center
+extern int faceY;       // Y coordinate of detected face center
+extern int faceWidth;   // Width of detected face
+extern int faceHeight;  // Height of detected face
+extern bool faceDetected; // Flag to indicate if face is detected
 
 // Select camera model
 //#define CAMERA_MODEL_WROVER_KIT
@@ -18,10 +25,76 @@
 
 #include "camera_pins.h"
 
+// Define the servo constants
+static const int servoPin = 14; // GPIO pin connected to the servo
+Servo servo1;
+
+// Servo parameters
+int servoPosition = 90;  // Track the current position of the servo (start at center position)
+const int SERVO_STEP = 2;     // Degrees to move per step (smaller = smoother, but slower)
+const int SERVO_MIN = 10;     // Minimum allowed angle to prevent mechanical issues
+const int SERVO_MAX = 170;    // Maximum allowed angle
+const int CENTER_X_THRESHOLD = 40; // How many pixels from center before we move the servo
+
+// Camera frame parameters
+const int CAMERA_CENTER_X = 160; // Assuming QVGA (320x240) with X center at 160
+
+// Smoothing parameters - to prevent jittery movement
+const int SMOOTHING_WINDOW = 5;
+int xPositions[5] = {0, 0, 0, 0, 0};
+int xPositionIndex = 0;
+
 const char* ssid = "tama";
 const char* password = "12345678";
 
 void startCameraServer();
+
+// Function to move servo to track the detected face
+void moveServoToTrackFace() {
+  if (!faceDetected) {
+    return; // No face to track
+  }
+  
+  // Store the X position in our smoothing array
+  xPositions[xPositionIndex] = faceX;
+  xPositionIndex = (xPositionIndex + 1) % SMOOTHING_WINDOW;
+  
+  // Calculate the average X position from our smoothing array
+  int avgX = 0;
+  for (int i = 0; i < SMOOTHING_WINDOW; i++) {
+    avgX += xPositions[i];
+  }
+  avgX /= SMOOTHING_WINDOW;
+  
+  // Calculate the offset from center of the frame
+  int offset = CAMERA_CENTER_X - avgX;
+  
+  // Only move if the offset is larger than the threshold
+  if (abs(offset) > CENTER_X_THRESHOLD) {
+    // Face is to the left of center, move servo clockwise
+    if (offset > 0 && servoPosition < SERVO_MAX) {
+      servoPosition += SERVO_STEP;
+    } 
+    // Face is to the right of center, move servo counterclockwise
+    else if (offset < 0 && servoPosition > SERVO_MIN) {
+      servoPosition -= SERVO_STEP;
+    }
+    
+    // Constrain servo position to valid range
+    servoPosition = constrain(servoPosition, SERVO_MIN, SERVO_MAX);
+    
+    // Update the servo position
+    servo1.write(servoPosition);
+    
+    // Debug output
+    Serial.print("Face detected at X: ");
+    Serial.print(faceX);
+    Serial.print(", Offset: ");
+    Serial.print(offset);
+    Serial.print(", Servo position: ");
+    Serial.println(servoPosition);
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -29,7 +102,16 @@ void setup() {
   Serial.println();
 
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
-
+  
+  // Initialize servo with specific PWM properties
+  ESP32PWM::allocateTimer(1); // Use timer 0 for servo
+  servo1.setPeriodHertz(50);  // Standard 50Hz servo
+  servo1.attach(servoPin, 500, 2400); // Min/Max pulse width for most servos
+  
+  // Move servo to initial center position
+  servo1.write(servoPosition);
+  delay(500);
+  
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -103,9 +185,40 @@ void setup() {
   Serial.print("Camera Ready! Use 'http://");
   Serial.print(WiFi.localIP());
   Serial.println("' to connect");
+  
+  // Initialize face tracking
+  for (int i = 0; i < SMOOTHING_WINDOW; i++) {
+    xPositions[i] = CAMERA_CENTER_X;  // Initialize with center position
+  }
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  delay(10000);
+  // The face detection and tracking mainly happens in the HTTP server task
+  // Inside the draw_face_boxes() function, which calls moveServoToTrackFace()
+  
+  // Reset face detection if no face is detected for a while
+  static unsigned long lastFaceTime = 0;
+  static bool wasDetected = false;
+  
+  if (faceDetected) {
+    if (!wasDetected) {
+      Serial.println("Face detected, tracking activated");
+      wasDetected = true;
+    }
+    lastFaceTime = millis();
+  } else if (wasDetected && (millis() - lastFaceTime > 3000)) {
+    // No face detected for 3 seconds, return to center position
+    Serial.println("Face lost, returning to center position");
+    servoPosition = 90;
+    servo1.write(servoPosition);
+    wasDetected = false;
+    
+    // Reset smoothing array
+    for (int i = 0; i < SMOOTHING_WINDOW; i++) {
+      xPositions[i] = CAMERA_CENTER_X;
+    }
+  }
+  
+  // Small delay to prevent CPU hogging
+  delay(50);
 }
