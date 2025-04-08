@@ -4,6 +4,7 @@
 #include "soc/soc.h"   
 #include "soc/rtc_cntl_reg.h"
 #include <ESP32Servo.h>
+#include <SPIFFS.h>
 //
 // WARNING!!! Make sure that you have either selected ESP32 Wrover Module,
 //            or another board which has PSRAM enabled
@@ -102,6 +103,13 @@ void setup() {
   Serial.println();
 
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
+  
+  // Initialize SPIFFS for user data storage
+  if (!SPIFFS.begin(true)) {
+    Serial.println("An error occurred while mounting SPIFFS");
+  } else {
+    Serial.println("SPIFFS mounted successfully");
+  }
   
   // Initialize servo with specific PWM properties
   ESP32PWM::allocateTimer(1); // Use timer 0 for servo

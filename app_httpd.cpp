@@ -20,6 +20,7 @@
 #include "pages.h"  // Include our new pages header
 #include <HTTPClient.h>
 #include <WiFi.h>
+#include <SPIFFS.h>  // Add SPIFFS library for file system
 
 #include "fb_gfx.h"
 #include "fd_forward.h"
@@ -38,7 +39,7 @@ extern void moveServoToTrackFace(); // Forward declaration for function in main 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
-// Forward declaration of log_activity function
+// Forward declarations
 static void log_activity(const char* message);
 
 // Add authentication related structures and variables
@@ -54,6 +55,67 @@ typedef struct {
 static user_t users[MAX_USERS];
 static int num_users = 0;
 static bool is_authenticated = false;
+
+// SPIFFS functions to save and load user data
+static bool saveUsersToSPIFFS() {
+    if (!SPIFFS.begin(true)) {
+        Serial.println("An error occurred while mounting SPIFFS");
+        return false;
+    }
+    
+    File file = SPIFFS.open("/users.dat", "w");
+    if (!file) {
+        Serial.println("Failed to open users file for writing");
+        return false;
+    }
+    
+    // Write number of users
+    file.write((uint8_t*)&num_users, sizeof(num_users));
+    
+    // Write each user record
+    for (int i = 0; i < num_users; i++) {
+        file.write((uint8_t*)&users[i], sizeof(user_t));
+    }
+    
+    file.close();
+    Serial.printf("Saved %d users to SPIFFS\n", num_users);
+    return true;
+}
+
+static bool loadUsersFromSPIFFS() {
+    if (!SPIFFS.begin(true)) {
+        Serial.println("An error occurred while mounting SPIFFS");
+        return false;
+    }
+    
+    if (!SPIFFS.exists("/users.dat")) {
+        Serial.println("No users file found, starting fresh");
+        return false;
+    }
+    
+    File file = SPIFFS.open("/users.dat", "r");
+    if (!file) {
+        Serial.println("Failed to open users file for reading");
+        return false;
+    }
+    
+    // Read number of users
+    file.read((uint8_t*)&num_users, sizeof(num_users));
+    
+    // Safety check to avoid buffer overflow
+    if (num_users > MAX_USERS) {
+        num_users = MAX_USERS;
+    }
+    
+    // Read each user record
+    for (int i = 0; i < num_users; i++) {
+        file.read((uint8_t*)&users[i], sizeof(user_t));
+    }
+    
+    file.close();
+    Serial.printf("Loaded %d users from SPIFFS\n", num_users);
+    return true;
+}
 
 #define ENROLL_CONFIRM_TIMES 5
 #define FACE_ID_SAVE_NUMBER 7
@@ -857,6 +919,8 @@ static esp_err_t register_handler(httpd_req_t *req) {
         users[num_users].face_id = id_list.tail;
         num_users++;
         
+        saveUsersToSPIFFS();  // Save updated user list to SPIFFS
+        
         httpd_resp_set_status(req, "200 OK");
         httpd_resp_send(req, NULL, 0);
         return ESP_OK;
@@ -910,6 +974,8 @@ void startCameraServer(){
     // Initialize flash LED
     setup_led();
     
+    // Load users from SPIFFS
+    loadUsersFromSPIFFS();
 
     httpd_uri_t index_uri = {
         .uri       = "/",
