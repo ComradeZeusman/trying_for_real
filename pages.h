@@ -525,12 +525,23 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     <span class="slider round"></span>
                 </label>
                 <span>Auto Face Tracking</span>
+            </div>        <div class="servo-buttons">
+            <div class="tilt-controls">
+                <button onclick="moveServo(0,10)" class="servo-btn">▲ Up</button>
             </div>
-            <div class="servo-buttons">
-                <button onclick="moveServo('left')" class="servo-btn">◀ Left</button>
+            <div class="pan-controls">
+                <button onclick="moveServo(-10,0)" class="servo-btn">◀ Left</button>
                 <button onclick="centerServo()" class="servo-btn">Center</button>
-                <button onclick="moveServo('right')" class="servo-btn">Right ▶</button>
+                <button onclick="moveServo(10,0)" class="servo-btn">Right ▶</button>
             </div>
+            <div class="tilt-controls">
+                <button onclick="moveServo(0,-10)" class="servo-btn">▼ Down</button>
+            </div>
+        </div>
+        <div class="servo-positions">
+            <span>Pan: <span id="panPositionDisplay">90°</span></span>
+            <span>Tilt: <span id="tiltPositionDisplay">90°</span></span>
+        </div>
         </div>
 
         <div class="activity-log">
@@ -721,16 +732,13 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     console.log('Auto tracking set to: ' + autoTracking);
                 })
                 .catch(error => console.error('Error:', error));
-        }
-
-        function moveServo(direction) {
-            let step = direction === 'left' ? 10 : -10;
-            fetch(baseHost + '/control?var=servo_move&val=' + step)
+        }        function moveServo(panChange, tiltChange) {
+            fetch(baseHost + '/control?var=servo_move&val=' + panChange + ',' + tiltChange)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.servo_pos !== undefined) {
-                        servoPosition = data.servo_pos;
-                        document.getElementById('servoPositionDisplay').textContent = servoPosition + '°';
+                    if (data.pan_pos !== undefined && data.tilt_pos !== undefined) {
+                        document.getElementById('panPositionDisplay').textContent = data.pan_pos + '°';
+                        document.getElementById('tiltPositionDisplay').textContent = data.tilt_pos + '°';
                     }
                 })
                 .catch(error => console.error('Error:', error));
@@ -740,9 +748,9 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             fetch(baseHost + '/control?var=servo_center&val=1')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.servo_pos !== undefined) {
-                        servoPosition = data.servo_pos;
-                        document.getElementById('servoPositionDisplay').textContent = servoPosition + '°';
+                    if (data.pan_pos !== undefined && data.tilt_pos !== undefined) {
+                        document.getElementById('panPositionDisplay').textContent = data.pan_pos + '°';
+                        document.getElementById('tiltPositionDisplay').textContent = data.tilt_pos + '°';
                     }
                 })
                 .catch(error => console.error('Error:', error));

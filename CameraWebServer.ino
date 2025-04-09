@@ -27,26 +27,32 @@ extern bool faceDetected; // Flag to indicate if face is detected
 #include "camera_pins.h"
 
 // Define the servo constants
-static const int servoPin = 14; // GPIO pin connected to the servo
-Servo servo1;
+static const int panServoPin = 14;  // GPIO pin connected to the pan servo
+static const int tiltServoPin = 15; // GPIO pin connected to the tilt servo
+Servo panServo;
+Servo tiltServo;
 
 // Servo parameters - these need to be non-static so they can be accessed from app_httpd.cpp
-int servoPosition = 90;  // Track the current position of the servo (start at center position)
+int panPosition = 90;   // Track the current position of the pan servo (start at center position)
+int tiltPosition = 90;  // Track the current position of the tilt servo (start at center position)
 const int SERVO_STEP = 2;     // Degrees to move per step (smaller = smoother, but slower)
 int SERVO_MIN = 10;     // Minimum allowed angle to prevent mechanical issues
 int SERVO_MAX = 170;    // Maximum allowed angle
-const int CENTER_X_THRESHOLD = 40; // How many pixels from center before we move the servo
+const int CENTER_THRESHOLD = 40; // How many pixels from center before we move the servos
 
 // Flag to control whether servo auto-tracks faces
 bool autoTrackingEnabled = true;  // Default to auto tracking enabled
 
 // Camera frame parameters
 const int CAMERA_CENTER_X = 160; // Assuming QVGA (320x240) with X center at 160
+const int CAMERA_CENTER_Y = 120; // Assuming QVGA (320x240) with Y center at 120
 
 // Smoothing parameters - to prevent jittery movement
 const int SMOOTHING_WINDOW = 5;
 int xPositions[5] = {0, 0, 0, 0, 0};
+int yPositions[5] = {0, 0, 0, 0, 0};
 int xPositionIndex = 0;
+int yPositionIndex = 0;
 
 const char* ssid = "tama";
 const char* password = "12345678";
@@ -59,45 +65,74 @@ void moveServoToTrackFace() {
     return; // No face to track
   }
   
-  // Store the X position in our smoothing array
+  // Store the X and Y positions in our smoothing arrays
   xPositions[xPositionIndex] = faceX;
+  yPositions[yPositionIndex] = faceY;
   xPositionIndex = (xPositionIndex + 1) % SMOOTHING_WINDOW;
+  yPositionIndex = (yPositionIndex + 1) % SMOOTHING_WINDOW;
   
-  // Calculate the average X position from our smoothing array
+  // Calculate the average X and Y positions from our smoothing arrays
   int avgX = 0;
+  int avgY = 0;
   for (int i = 0; i < SMOOTHING_WINDOW; i++) {
     avgX += xPositions[i];
+    avgY += yPositions[i];
   }
   avgX /= SMOOTHING_WINDOW;
+  avgY /= SMOOTHING_WINDOW;
   
-  // Calculate the offset from center of the frame
-  int offset = CAMERA_CENTER_X - avgX;
+  // Calculate the offsets from center of the frame
+  int offsetX = CAMERA_CENTER_X - avgX;
+  int offsetY = CAMERA_CENTER_Y - avgY;
   
-  // Only move if the offset is larger than the threshold
-  if (abs(offset) > CENTER_X_THRESHOLD) {
-    // Face is to the left of center, move servo clockwise
-    if (offset > 0 && servoPosition < SERVO_MAX) {
-      servoPosition += SERVO_STEP;
+  // Only move if the offsets are larger than the threshold
+  if (abs(offsetX) > CENTER_THRESHOLD) {
+    // Face is to the left of center, move pan servo clockwise
+    if (offsetX > 0 && panPosition < SERVO_MAX) {
+      panPosition += SERVO_STEP;
     } 
-    // Face is to the right of center, move servo counterclockwise
-    else if (offset < 0 && servoPosition > SERVO_MIN) {
-      servoPosition -= SERVO_STEP;
+    // Face is to the right of center, move pan servo counterclockwise
+    else if (offsetX < 0 && panPosition > SERVO_MIN) {
+      panPosition -= SERVO_STEP;
     }
     
-    // Constrain servo position to valid range
-    servoPosition = constrain(servoPosition, SERVO_MIN, SERVO_MAX);
+    // Constrain pan servo position to valid range
+    panPosition = constrain(panPosition, SERVO_MIN, SERVO_MAX);
     
-    // Update the servo position
-    servo1.write(servoPosition);
-    
-    // Debug output
-    Serial.print("Face detected at X: ");
-    Serial.print(faceX);
-    Serial.print(", Offset: ");
-    Serial.print(offset);
-    Serial.print(", Servo position: ");
-    Serial.println(servoPosition);
+    // Update the pan servo position
+    panServo.write(panPosition);
   }
+  
+  if (abs(offsetY) > CENTER_THRESHOLD) {
+    // Face is above center, move tilt servo clockwise
+    if (offsetY > 0 && tiltPosition < SERVO_MAX) {
+      tiltPosition += SERVO_STEP;
+    } 
+    // Face is below center, move tilt servo counterclockwise
+    else if (offsetY < 0 && tiltPosition > SERVO_MIN) {
+      tiltPosition -= SERVO_STEP;
+    }
+    
+    // Constrain tilt servo position to valid range
+    tiltPosition = constrain(tiltPosition, SERVO_MIN, SERVO_MAX);
+    
+    // Update the tilt servo position
+    tiltServo.write(tiltPosition);
+  }
+  
+  // Debug output
+  Serial.print("Face detected at X: ");
+  Serial.print(faceX);
+  Serial.print(", Y: ");
+  Serial.print(faceY);
+  Serial.print(", OffsetX: ");
+  Serial.print(offsetX);
+  Serial.print(", OffsetY: ");
+  Serial.print(offsetY);
+  Serial.print(", Pan position: ");
+  Serial.print(panPosition);
+  Serial.print(", Tilt position: ");
+  Serial.println(tiltPosition);
 }
 
 void setup() {
@@ -114,13 +149,16 @@ void setup() {
     Serial.println("SPIFFS mounted successfully");
   }
   
-  // Initialize servo with specific PWM properties
-  ESP32PWM::allocateTimer(1); // Use timer 0 for servo
-  servo1.setPeriodHertz(50);  // Standard 50Hz servo
-  servo1.attach(servoPin, 500, 2400); // Min/Max pulse width for most servos
+  // Initialize servos with specific PWM properties
+  ESP32PWM::allocateTimer(1); // Use timer 0 for servos
+  panServo.setPeriodHertz(50);  // Standard 50Hz servo
+  tiltServo.setPeriodHertz(50); // Standard 50Hz servo
+  panServo.attach(panServoPin, 500, 2400); // Min/Max pulse width for most servos
+  tiltServo.attach(tiltServoPin, 500, 2400); // Min/Max pulse width for most servos
   
-  // Move servo to initial center position
-  servo1.write(servoPosition);
+  // Move servos to initial center position
+  panServo.write(panPosition);
+  tiltServo.write(tiltPosition);
   delay(500);
   
   camera_config_t config;
@@ -200,13 +238,16 @@ void setup() {
   // Initialize face tracking
   for (int i = 0; i < SMOOTHING_WINDOW; i++) {
     xPositions[i] = CAMERA_CENTER_X;  // Initialize with center position
+    yPositions[i] = CAMERA_CENTER_Y;  // Initialize with center position
   }
 }
 
-// Function that can be called from app_httpd.cpp to set the servo position
-void setServoPosition(int position) {
-  servoPosition = constrain(position, SERVO_MIN, SERVO_MAX);
-  servo1.write(servoPosition);
+// Function that can be called from app_httpd.cpp to set the servo positions
+void setServoPositions(int pan, int tilt) {
+  panPosition = constrain(pan, SERVO_MIN, SERVO_MAX);
+  tiltPosition = constrain(tilt, SERVO_MIN, SERVO_MAX);
+  panServo.write(panPosition);
+  tiltServo.write(tiltPosition);
 }
 
 void loop() {
@@ -226,13 +267,16 @@ void loop() {
   } else if (wasDetected && (millis() - lastFaceTime > 3000)) {
     // No face detected for 3 seconds, return to center position
     Serial.println("Face lost, returning to center position");
-    servoPosition = 90;
-    servo1.write(servoPosition);
+    panPosition = 90;
+    tiltPosition = 90;
+    panServo.write(panPosition);
+    tiltServo.write(tiltPosition);
     wasDetected = false;
     
-    // Reset smoothing array
+    // Reset smoothing arrays
     for (int i = 0; i < SMOOTHING_WINDOW; i++) {
       xPositions[i] = CAMERA_CENTER_X;
+      yPositions[i] = CAMERA_CENTER_Y;
     }
   }
   
