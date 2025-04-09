@@ -512,7 +512,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         </div>        <div class="controls">
             <button onclick="toggleDetection()">Toggle Face Detection</button>
             <button onclick="toggleRecognition()">Toggle Face Recognition</button>
-            <button onclick="capturePhoto()">Capture Photo</button>
+            <button id="captureBtn" onclick="capturePhoto()">Capture Photo</button>
             <button onclick="openSettings()">Camera Settings</button>
             <button onclick="window.location.href='/register'">Add New User</button>
         </div>
@@ -618,10 +618,38 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 .then(response => {
                     document.getElementById('recognizeStatus').textContent = recognition ? 'ON' : 'OFF';
                 });
-        }
-
-        function capturePhoto() {
-            window.open(baseHost + '/capture');
+        }        function capturePhoto() {
+            // Show loading indicator
+            document.getElementById('captureBtn').textContent = 'Capturing...';
+            document.getElementById('captureBtn').disabled = true;
+            
+            // Fetch the image
+            fetch(baseHost + '/capture')
+                .then(response => response.blob())
+                .then(blob => {
+                    // Create a download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'esp32cam-capture-' + timestamp + '.jpg';
+                    
+                    // Append to the document, click it, and remove it
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    // Reset button state
+                    document.getElementById('captureBtn').textContent = 'Capture Photo';
+                    document.getElementById('captureBtn').disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error capturing photo:', error);
+                    document.getElementById('captureBtn').textContent = 'Capture Photo';
+                    document.getElementById('captureBtn').disabled = false;
+                });
         }
 
         function logout() {
