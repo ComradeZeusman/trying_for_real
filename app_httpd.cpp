@@ -21,6 +21,7 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <SPIFFS.h>  // Add SPIFFS library for file system
+#include <ESP32Servo.h>
 
 #include "fb_gfx.h"
 #include "fd_forward.h"
@@ -780,6 +781,57 @@ static esp_err_t cmd_handler(httpd_req_t *req){
         if(recognition_enabled){
             detection_enabled = val;
         }
+    }
+    else if(!strcmp(variable, "servo_auto_track")) {
+        // Enable/disable automatic face tracking
+        extern bool autoTrackingEnabled;
+        autoTrackingEnabled = val > 0;
+        char msg[100];
+        snprintf(msg, sizeof(msg), "Auto face tracking %s", autoTrackingEnabled ? "enabled" : "disabled");
+        log_activity(msg);
+    }
+    else if(!strcmp(variable, "servo_move")) {
+        // Move servo by specified amount (positive = left, negative = right)
+        extern int servoPosition;
+        extern void servo1_write(int position);
+        
+        // Calculate new position
+        servoPosition += val;
+        
+        // Ensure position stays within valid range
+        extern const int SERVO_MIN;
+        extern const int SERVO_MAX;
+        servoPosition = constrain(servoPosition, SERVO_MIN, SERVO_MAX);
+        
+        // Move servo to new position
+        extern Servo servo1;
+        servo1.write(servoPosition);
+        
+        char msg[100];
+        snprintf(msg, sizeof(msg), "Servo manually moved to %d°", servoPosition);
+        log_activity(msg);
+        
+        // Prepare JSON response with current servo position
+        char json_response[50];
+        snprintf(json_response, sizeof(json_response), "{\"servo_pos\":%d}", servoPosition);
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_send(req, json_response, strlen(json_response));
+    }
+    else if(!strcmp(variable, "servo_center")) {
+        // Center the servo (move to 90 degrees)
+        extern int servoPosition;
+        extern Servo servo1;
+        
+        servoPosition = 90;
+        servo1.write(servoPosition);
+        
+        log_activity("Servo centered to 90°");
+        
+        // Prepare JSON response with current servo position
+        char json_response[50];
+        snprintf(json_response, sizeof(json_response), "{\"servo_pos\":%d}", servoPosition);
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_send(req, json_response, strlen(json_response));
     }
     else {
         res = -1;

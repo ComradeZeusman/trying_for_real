@@ -30,12 +30,15 @@ extern bool faceDetected; // Flag to indicate if face is detected
 static const int servoPin = 14; // GPIO pin connected to the servo
 Servo servo1;
 
-// Servo parameters
+// Servo parameters - these need to be non-static so they can be accessed from app_httpd.cpp
 int servoPosition = 90;  // Track the current position of the servo (start at center position)
 const int SERVO_STEP = 2;     // Degrees to move per step (smaller = smoother, but slower)
-const int SERVO_MIN = 10;     // Minimum allowed angle to prevent mechanical issues
-const int SERVO_MAX = 170;    // Maximum allowed angle
+int SERVO_MIN = 10;     // Minimum allowed angle to prevent mechanical issues
+int SERVO_MAX = 170;    // Maximum allowed angle
 const int CENTER_X_THRESHOLD = 40; // How many pixels from center before we move the servo
+
+// Flag to control whether servo auto-tracks faces
+bool autoTrackingEnabled = true;  // Default to auto tracking enabled
 
 // Camera frame parameters
 const int CAMERA_CENTER_X = 160; // Assuming QVGA (320x240) with X center at 160
@@ -198,6 +201,12 @@ void setup() {
   for (int i = 0; i < SMOOTHING_WINDOW; i++) {
     xPositions[i] = CAMERA_CENTER_X;  // Initialize with center position
   }
+}
+
+// Function that can be called from app_httpd.cpp to set the servo position
+void setServoPosition(int position) {
+  servoPosition = constrain(position, SERVO_MIN, SERVO_MAX);
+  servo1.write(servoPosition);
 }
 
 void loop() {

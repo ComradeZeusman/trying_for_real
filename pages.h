@@ -408,10 +408,82 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         .status-badge.active {
             background: #2ecc71;
             color: white;
-        }
-        .status-badge.inactive {
+        }        .status-badge.inactive {
             background: #e74c3c;
             color: white;
+        }
+        /* Servo control panel styles */
+        .servo-control-panel {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            margin: 20px 0;
+        }
+        .servo-control-panel h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .servo-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .servo-buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .servo-btn {
+            flex: 1;
+        }
+        /* Toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+        }
+        input:checked + .slider {
+            background-color: #3498db;
+        }
+        input:focus + .slider {
+            box-shadow: 0 0 1px #3498db;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .slider.round {
+            border-radius: 34px;
+        }
+        .slider.round:before {
+            border-radius: 50%;
         }
     </style>
 </head>
@@ -420,9 +492,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         <div class="header">
             <h1>ESP32-CAM Dashboard</h1>
             <button class="logout" onclick="logout()">Logout</button>
-        </div>
-
-        <div class="status-bar">
+        </div>        <div class="status-bar">
             <div class="status-item">
                 System Uptime: <span id="uptime">0s</span>
             </div>
@@ -432,18 +502,35 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             <div class="status-item">
                 Face Recognition: <span id="recognizeStatus">OFF</span>
             </div>
+            <div class="status-item">
+                Servo Position: <span id="servoPositionDisplay">90°</span>
+            </div>
         </div>
 
         <div class="video-container">
             <img id="stream" src="" alt="Loading camera stream...">
-        </div>
-
-        <div class="controls">
+        </div>        <div class="controls">
             <button onclick="toggleDetection()">Toggle Face Detection</button>
             <button onclick="toggleRecognition()">Toggle Face Recognition</button>
             <button onclick="capturePhoto()">Capture Photo</button>
             <button onclick="openSettings()">Camera Settings</button>
             <button onclick="window.location.href='/register'">Add New User</button>
+        </div>
+
+        <div class="servo-control-panel">
+            <h3>Servo Control</h3>
+            <div class="servo-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="autoTrackingToggle" checked onchange="toggleAutoTracking()">
+                    <span class="slider round"></span>
+                </label>
+                <span>Auto Face Tracking</span>
+            </div>
+            <div class="servo-buttons">
+                <button onclick="moveServo('left')" class="servo-btn">◀ Left</button>
+                <button onclick="centerServo()" class="servo-btn">Center</button>
+                <button onclick="moveServo('right')" class="servo-btn">Right ▶</button>
+            </div>
         </div>
 
         <div class="activity-log">
@@ -486,13 +573,13 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 </div>
             </div>
         </div>
-    </div>
-
-    <script>
+    </div>    <script>
         var baseHost = document.location.origin;
         var streamUrl = baseHost + ':81/stream';
         var detection = false;
         var recognition = false;
+        var autoTracking = true;
+        var servoPosition = 90; // Initial position
 
         document.getElementById('stream').src = streamUrl;
 
@@ -585,9 +672,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 
         // Update status every 5 seconds
         setInterval(updateStatus, 5000);
-        updateStatus(); // Initial update
-
-        // Check authentication status periodically
+        updateStatus(); // Initial update        // Check authentication status periodically
         function checkAuth() {
             fetch(baseHost + '/check-auth')
                 .then(response => {
@@ -599,6 +684,41 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         }
 
         checkAuth();
+
+        // Servo control functions
+        function toggleAutoTracking() {
+            autoTracking = document.getElementById('autoTrackingToggle').checked;
+            fetch(baseHost + '/control?var=servo_auto_track&val=' + (autoTracking ? '1' : '0'))
+                .then(response => {
+                    console.log('Auto tracking set to: ' + autoTracking);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function moveServo(direction) {
+            let step = direction === 'left' ? 10 : -10;
+            fetch(baseHost + '/control?var=servo_move&val=' + step)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.servo_pos !== undefined) {
+                        servoPosition = data.servo_pos;
+                        document.getElementById('servoPositionDisplay').textContent = servoPosition + '°';
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function centerServo() {
+            fetch(baseHost + '/control?var=servo_center&val=1')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.servo_pos !== undefined) {
+                        servoPosition = data.servo_pos;
+                        document.getElementById('servoPositionDisplay').textContent = servoPosition + '°';
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
     </script>
 </body>
 </html>
