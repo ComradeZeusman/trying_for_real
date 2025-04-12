@@ -634,8 +634,8 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             document.getElementById('captureBtn').textContent = 'Capturing...';
             document.getElementById('captureBtn').disabled = true;
             
-            // Fetch the image
-            fetch(baseHost + '/capture')
+            // Fetch the image from dashboard endpoint with capture action
+            fetch(baseHost + '/dashboard?action=capture')
                 .then(response => response.blob())
                 .then(blob => {
                     // Create a download link

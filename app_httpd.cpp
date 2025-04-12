@@ -1011,6 +1011,32 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
         return ESP_OK;
     }
     
+    // Check if this is a capture request
+    char* buf = NULL;
+    size_t buf_len = httpd_req_get_url_query_len(req) + 1;
+    
+    if (buf_len > 1) {
+        buf = (char*)malloc(buf_len);
+        if (!buf) {
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+            char action[32] = {0};
+            if (httpd_query_key_value(buf, "action", action, sizeof(action)) == ESP_OK) {
+                if (strcmp(action, "capture") == 0) {
+                    free(buf);
+                    // This is a capture request, handle it
+                    log_activity("Photo captured from dashboard");
+                    return capture_handler(req);
+                }
+            }
+        }
+        free(buf);
+    }
+    
+    // Normal dashboard request
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, DASHBOARD_HTML, strlen(DASHBOARD_HTML));
 }
