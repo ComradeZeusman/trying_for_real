@@ -30,7 +30,7 @@ const char LOGIN_HTML[] = R"rawliteral(
                 border-radius: 4px;
             }
             button {
-                background-color: #4CAF50;
+                background-color: #3498db;
                 color: white;
                 padding: 10px 20px;
                 border: none;
@@ -39,7 +39,7 @@ const char LOGIN_HTML[] = R"rawliteral(
                 margin: 5px;
             }
             button:hover {
-                background-color: #45a049;
+                background-color: #2980b9;;
             }
             .login-options {
                 display: flex;
@@ -680,10 +680,8 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
             if (minutes > 0) return `${minutes}m ${secs}s`;
             return `${secs}s`;
-        }
-
-        function updateStatus() {
-            fetch(baseHost + '/status')
+        }        function updateStatus() {
+            fetch(baseHost + '/dashboard?action=status')
                 .then(response => response.json())
                 .then(data => {
                     // Update uptime
@@ -792,7 +790,7 @@ const char REGISTRATION_HTML[] = R"rawliteral(
                 border-radius: 4px;
             }
             button {
-                background-color: #4CAF50;
+                background-color:#3498db;
                 color: white;
                 padding: 10px 20px;
                 border: none;
@@ -801,7 +799,7 @@ const char REGISTRATION_HTML[] = R"rawliteral(
                 margin: 5px;
             }
             button:hover {
-                background-color: #45a049;
+                background-color: #2980b9;;
             }
             .video-container {
                 margin: 20px 0;

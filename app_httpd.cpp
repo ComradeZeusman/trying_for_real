@@ -1031,6 +1031,11 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
                     log_activity("Photo captured from dashboard");
                     return capture_handler(req);
                 }
+                else if (strcmp(action, "status") == 0) {
+                    free(buf);
+                    // This is a status request, forward to status handler
+                    return status_handler(req);
+                }
             }
         }
         free(buf);
