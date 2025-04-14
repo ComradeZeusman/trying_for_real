@@ -132,9 +132,9 @@ static bool loadUsersFromSPIFFS() {
 
 #define MAX_ACTIVITIES 10
 #define FLASH_LED_PIN 4
-#define BUZZER_PIN 2
+#define BUZZER_PIN 13
 #define BUZZER_CHANNEL 1  // Use LEDC channel 1
-#define BUZZER_TIMER 1    // Use LEDC timer 1
+#define BUZZER_TIMER 2    // Use LEDC timer 2 (changed from timer 1)
 #define BUZZER_FREQ 2000  // Buzzer frequency in Hz
 #define BUZZER_RES 8      // 8-bit resolution
 
@@ -315,35 +315,35 @@ static void log_activity(const char* message) {
 }
 
 static void send_sms_alert(const char* phone_number) {
-    HTTPClient http;
-    http.begin("https://telcomw.com/api-v2/send");
-    http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
+    // HTTPClient http;
+    // http.begin("https://telcomw.com/api-v2/send");
+    // http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
     
-    // Use a static buffer to build the body
-    char body[512]; // Adjust size based on your needs
-    snprintf(body, sizeof(body),
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
-        "--boundary--\r\n",
-        phone_number);
+    // // Use a static buffer to build the body
+    // char body[512]; // Adjust size based on your needs
+    // snprintf(body, sizeof(body),
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
+    //     "--boundary--\r\n",
+    //     phone_number);
 
-    int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
+    // int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
     
-    if (httpResponseCode > 0) {
-        Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
-    } else {
-        Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
-    }
+    // if (httpResponseCode > 0) {
+    //     Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
+    // } else {
+    //     Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
+    // }
     
-    http.end();
+    // http.end();
 }
 
 static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, int face_id){
@@ -351,8 +351,9 @@ static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, in
     uint32_t color = FACE_COLOR_YELLOW;
     if(face_id < 0){
         color = FACE_COLOR_RED;
-         flash_led(); // Flash LED for intruder
-         send_sms_alert("0993616223");
+        flash_led(); // Flash LED for intruder
+        sound_buzzer(); // Sound the buzzer for intruder alert
+
     } else if(face_id > 0){
         color = FACE_COLOR_GREEN;
     }
