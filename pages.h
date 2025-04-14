@@ -2,7 +2,7 @@ const char LOGIN_HTML[] = R"rawliteral(
     <!DOCTYPE html>
     <html>
     <head>
-        <title>ESP32-CAM Login</title>
+        <title>Ufulu Home Security Login</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {
@@ -65,7 +65,7 @@ const char LOGIN_HTML[] = R"rawliteral(
     </head>
     <body>
         <div class="container">
-            <h1>ESP32-CAM Login</h1>
+            <h1>Ufulu Home Security Login</h1>
             
             <div class="login-options">
                 <button onclick="showCredentialLogin()">Login with Credentials</button>
@@ -190,7 +190,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32-CAM Dashboard</title>
+    <title>Ufulu Home Security Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
@@ -490,7 +490,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 <body>
     <div class="container">
         <div class="header">
-            <h1>ESP32-CAM Dashboard</h1>
+            <h1>Ufulu Home Security Dashboard</h1>
             <button class="logout" onclick="logout()">Logout</button>
         </div>        <div class="status-bar">
             <div class="status-item">
@@ -762,7 +762,7 @@ const char REGISTRATION_HTML[] = R"rawliteral(
     <!DOCTYPE html>
     <html>
     <head>
-        <title>ESP32-CAM Registration</title>
+        <title>Ufulu Home Security Registration</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {
@@ -824,7 +824,7 @@ const char REGISTRATION_HTML[] = R"rawliteral(
     </head>
     <body>
         <div class="container">
-            <h1>ESP32-CAM Registration</h1>
+            <h1>Ufulu Home Security Registration</h1>
             
             <div class="form-group">
                 <input type="text" id="username" placeholder="Username" required>
