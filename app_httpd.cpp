@@ -1015,8 +1015,7 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
     // Check if this is a capture request
     char* buf = NULL;
     size_t buf_len = httpd_req_get_url_query_len(req) + 1;
-    
-    if (buf_len > 1) {
+      if (buf_len > 1) {
         buf = (char*)malloc(buf_len);
         if (!buf) {
             httpd_resp_send_500(req);
@@ -1036,6 +1035,211 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
                     free(buf);
                     // This is a status request, forward to status handler
                     return status_handler(req);
+                }
+                else if (strcmp(action, "report") == 0) {
+                    free(buf);
+                    // This is a report generation request
+                    log_activity("System report generated");
+                    
+                    // Get the system's sensor for camera config
+                    sensor_t * s = esp_camera_sensor_get();
+                    
+                    // Create a buffer for the HTML report content
+                    char *report_html = (char*)malloc(8192); // Allocate 8KB for the report
+                    if (!report_html) {
+                        httpd_resp_send_500(req);
+                        return ESP_FAIL;
+                    }
+                    
+                    // Start building the HTML report
+                    int len = 0;
+                    len += sprintf(report_html + len, 
+                        "<!DOCTYPE html>\n"
+                        "<html>\n"
+                        "<head>\n"
+                        "  <title>Ufulu Home Security System Report</title>\n"
+                        "  <style>\n"
+                        "    body { font-family: Arial, sans-serif; margin: 20px; }\n"
+                        "    h1 { color: #3498db; text-align: center; }\n"
+                        "    h2 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 5px; }\n"
+                        "    .section { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }\n"
+                        "    table { width: 100%%; border-collapse: collapse; }\n"
+                        "    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }\n"
+                        "    th { background-color: #f2f2f2; }\n"
+                        "    .status-good { color: green; }\n"
+                        "    .status-warning { color: orange; }\n"
+                        "    .status-danger { color: red; }\n"
+                        "    .footer { text-align: center; margin-top: 30px; color: #7f8c8d; font-size: 12px; }\n"
+                        "  </style>\n"
+                        "</head>\n"
+                        "<body>\n"
+                        "  <h1>Ufulu Home Security System Report</h1>\n"
+                        "  <div class='section'>\n"
+                        "    <h2>System Information</h2>\n"
+                        "    <table>\n"
+                        "      <tr><th>Item</th><th>Value</th></tr>\n"
+                        "      <tr><td>System Uptime</td><td>%lu seconds</td></tr>\n"
+                        "      <tr><td>Camera Model</td><td>ESP32-CAM AI-THINKER</td></tr>\n"
+                        "      <tr><td>Face Detection</td><td>%s</td></tr>\n"
+                        "      <tr><td>Face Recognition</td><td>%s</td></tr>\n"
+                        "      <tr><td>Registered Users</td><td>%d</td></tr>\n"
+                        "    </table>\n"
+                        "  </div>\n",
+                        millis() / 1000,
+                        detection_enabled ? "Enabled" : "Disabled",
+                        recognition_enabled ? "Enabled" : "Disabled",
+                        num_users
+                    );
+                    
+                    // Add camera configuration section
+                    len += sprintf(report_html + len,
+                        "  <div class='section'>\n"
+                        "    <h2>Camera Configuration</h2>\n"
+                        "    <table>\n"
+                        "      <tr><th>Setting</th><th>Value</th></tr>\n"
+                        "      <tr><td>Resolution</td><td>%s</td></tr>\n"
+                        "      <tr><td>Quality</td><td>%u</td></tr>\n"
+                        "      <tr><td>Brightness</td><td>%d</td></tr>\n"
+                        "      <tr><td>Contrast</td><td>%d</td></tr>\n"
+                        "      <tr><td>Saturation</td><td>%d</td></tr>\n"
+                        "      <tr><td>Horizontal Mirror</td><td>%s</td></tr>\n"
+                        "      <tr><td>Vertical Flip</td><td>%s</td></tr>\n"
+                        "    </table>\n"
+                        "  </div>\n",
+                        s->status.framesize == 0 ? "QQVGA (160x120)" :
+                        s->status.framesize == 3 ? "HQVGA (240x176)" :
+                        s->status.framesize == 4 ? "QVGA (320x240)" :
+                        s->status.framesize == 5 ? "CIF (400x296)" :
+                        s->status.framesize == 6 ? "VGA (640x480)" :
+                        s->status.framesize == 8 ? "SVGA (800x600)" : "Unknown",
+                        s->status.quality,
+                        s->status.brightness,
+                        s->status.contrast,
+                        s->status.saturation,
+                        s->status.hmirror ? "Yes" : "No",
+                        s->status.vflip ? "Yes" : "No"
+                    );
+                    
+                    // Add activity logs section
+                    len += sprintf(report_html + len,
+                        "  <div class='section'>\n"
+                        "    <h2>Recent Activities</h2>\n"
+                        "    <table>\n"
+                        "      <tr><th>Event</th><th>Time (seconds ago)</th></tr>\n"
+                    );
+                    
+                    for (int i = 0; i < activity_count && i < MAX_ACTIVITIES; i++) {
+                        len += sprintf(report_html + len,
+                            "      <tr><td>%s</td><td>%lu</td></tr>\n",
+                            activities[i].message,
+                            (millis() - activities[i].timestamp) / 1000
+                        );
+                    }
+                    
+                    len += sprintf(report_html + len, "    </table>\n  </div>\n");
+                    
+                    // Add servo and hardware section
+                    extern int panPosition;
+                    extern int tiltPosition;
+                    extern bool autoTrackingEnabled;
+                    
+                    len += sprintf(report_html + len,
+                        "  <div class='section'>\n"
+                        "    <h2>Hardware Status</h2>\n"
+                        "    <table>\n"
+                        "      <tr><th>Device</th><th>Status</th></tr>\n"
+                        "      <tr><td>Pan Servo Position</td><td>%d°</td></tr>\n"
+                        "      <tr><td>Tilt Servo Position</td><td>%d°</td></tr>\n"
+                        "      <tr><td>Auto Face Tracking</td><td>%s</td></tr>\n"
+                        "      <tr><td>Alert Buzzer</td><td>%s</td></tr>\n"
+                        "      <tr><td>Flash LED</td><td>Ready</td></tr>\n"
+                        "    </table>\n"
+                        "  </div>\n",
+                        panPosition,
+                        tiltPosition,
+                        autoTrackingEnabled ? "Enabled" : "Disabled",
+                        buzzer_active ? "Active" : "Ready"
+                    );
+                    
+                    // Add SMS alerts section if applicable
+                    len += sprintf(report_html + len,
+                        "  <div class='section'>\n"
+                        "    <h2>SMS Alert Recipients</h2>\n"
+                        "    <table>\n"
+                        "      <tr><th>User</th><th>Phone Number</th></tr>\n"
+                    );
+                    
+                    // List users with phone numbers for SMS alerts
+                    bool has_sms_recipients = false;
+                    for (int i = 0; i < num_users; i++) {
+                        if (users[i].phone[0] != '\0') {
+                            has_sms_recipients = true;
+                            len += sprintf(report_html + len,
+                                "      <tr><td>%s</td><td>%s</td></tr>\n",
+                                users[i].username,
+                                users[i].phone
+                            );
+                        }
+                    }
+                    
+                    if (!has_sms_recipients) {
+                        len += sprintf(report_html + len,
+                            "      <tr><td colspan='2'>No SMS recipients configured</td></tr>\n"
+                        );
+                    }
+                    
+                    len += sprintf(report_html + len, "    </table>\n  </div>\n");
+                    
+                    // Add intruder alert statistics
+                    len += sprintf(report_html + len,
+                        "  <div class='section'>\n"
+                        "    <h2>Security Incidents</h2>\n"
+                        "    <p>Note: This section shows detected security events from system logs.</p>\n"
+                        "    <table>\n"
+                        "      <tr><th>Incident Type</th><th>Count</th></tr>\n"
+                    );
+                    
+                    // Count intrusion events from activity logs
+                    int intruder_count = 0;
+                    for (int i = 0; i < activity_count; i++) {
+                        if (strstr(activities[i].message, "Intruder") != NULL) {
+                            intruder_count++;
+                        }
+                    }
+                    
+                    len += sprintf(report_html + len,
+                        "      <tr><td>Intruder Detections</td><td>%d</td></tr>\n"
+                        "    </table>\n"
+                        "  </div>\n",
+                        intruder_count
+                    );                    // Finalize the report with footer and print button
+                    len += sprintf(report_html + len,
+                        "  <div class='footer'>\n"
+                        "    <p>Report generated at: %lu (system time in milliseconds)</p>\n"
+                        "    <p>Ufulu Home Security System - ESP32-CAM</p>\n"
+                        "  </div>\n"
+                        "  <div style='text-align:center; margin:30px;'>\n"
+                        "    <button onclick='window.print()' style='padding:10px 20px; background:#3498db; color:white; border:none; border-radius:4px; cursor:pointer; font-size:16px;'>Save as PDF</button>\n"
+                        "  </div>\n"
+                        "  <script>\n"
+                        "    window.onload = function() {\n"
+                        "      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n"
+                        "      document.title = 'ufulu-security-report-' + timestamp;\n"
+                        "    }\n"
+                        "  </script>\n"
+                        "</body>\n"
+                        "</html>",
+                        millis()
+                    );
+                    
+                    // Send as HTML content with proper headers
+                    httpd_resp_set_type(req, "text/html");
+                    // Don't set Content-Disposition header for inline viewing
+                    esp_err_t res = httpd_resp_send(req, report_html, len);
+                    
+                    // Free the buffer
+                    free(report_html);
+                    return res;
                 }
             }
         }

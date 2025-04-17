@@ -515,6 +515,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             <button id="captureBtn" onclick="capturePhoto()">Capture Photo</button>
             <button onclick="openSettings()">Camera Settings</button>
             <button onclick="window.location.href='/register'">Add New User</button>
+            <button id="reportBtn" onclick="generateReport()">Generate System Report</button>
         </div>
 
         <div class="servo-control-panel">
@@ -651,8 +652,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                    
-                    // Reset button state
+                      // Reset button state
                     document.getElementById('captureBtn').textContent = 'Capture Photo';
                     document.getElementById('captureBtn').disabled = false;
                 })
@@ -661,6 +661,20 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     document.getElementById('captureBtn').textContent = 'Capture Photo';
                     document.getElementById('captureBtn').disabled = false;
                 });
+        }        function generateReport() {
+            // Show loading indicator
+            document.getElementById('reportBtn').textContent = 'Generating...';
+            document.getElementById('reportBtn').disabled = true;
+            
+            // Open the report in a new tab directly
+            const reportUrl = baseHost + '/dashboard?action=report';
+            window.open(reportUrl, '_blank');
+            
+            // Reset button state after a short delay
+            setTimeout(() => {
+                document.getElementById('reportBtn').textContent = 'Generate System Report';
+                document.getElementById('reportBtn').disabled = false;
+            }, 1000);
         }
 
         function logout() {
