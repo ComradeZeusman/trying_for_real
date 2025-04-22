@@ -146,6 +146,7 @@ typedef struct {
 static activity_log_t activities[MAX_ACTIVITIES];
 static int activity_count = 0;
 static unsigned long start_time = 0;
+static bool activatesms = false;
 
 typedef struct {
         size_t size; //number of values used for filtering
@@ -315,35 +316,35 @@ static void log_activity(const char* message) {
 }
 
 static void send_sms_alert(const char* phone_number) {
-    // HTTPClient http;
-    // http.begin("https://telcomw.com/api-v2/send");
-    // http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
+    HTTPClient http;
+    http.begin("https://telcomw.com/api-v2/send");
+    http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
     
-    // // Use a static buffer to build the body
-    // char body[512]; // Adjust size based on your needs
-    // snprintf(body, sizeof(body),
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
-    //     "--boundary--\r\n",
-    //     phone_number);
+    // Use a static buffer to build the body
+    char body[512]; // Adjust size based on your needs
+    snprintf(body, sizeof(body),
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
+        "--boundary--\r\n",
+        phone_number);
 
-    // int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
+    int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
     
-    // if (httpResponseCode > 0) {
-    //     Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
-    // } else {
-    //     Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
-    // }
+    if (httpResponseCode > 0) {
+        Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
+    } else {
+        Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
+    }
     
-    // http.end();
+    http.end();
 }
 
 static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, int face_id){
@@ -445,11 +446,13 @@ static int run_face_recognition(dl_matrix3du_t *image_matrix, box_array_t *net_b
                 log_activity("Intruder Alert - Unknown face detected");
                 
                 // Send SMS alert to all registered users
+                if(activatesms){
                 for(int i = 0; i < num_users; i++) {
                     if(users[i].phone[0] != '\0') {
                         send_sms_alert(users[i].phone);
                     }
                 }
+            }
                 matched_id = -1;
             }
         }
@@ -932,6 +935,7 @@ static esp_err_t login_handler(httpd_req_t *req) {
             if (strcmp(users[i].username, username) == 0 && 
                 strcmp(users[i].password, password) == 0) {
                 is_authenticated = true;
+                activatesms = true; // Enable SMS alerts for this user
                 httpd_resp_set_status(req, "200 OK");
                 httpd_resp_send(req, NULL, 0);
                 return ESP_OK;

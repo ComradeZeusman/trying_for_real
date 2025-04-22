@@ -69,7 +69,7 @@ const char LOGIN_HTML[] = R"rawliteral(
             
             <div class="login-options">
                 <button onclick="showCredentialLogin()">Login with Credentials</button>
-                <button onclick="showFaceLogin()">Login with Face</button>
+                
             </div>
     
             <div id="credentialLogin">
