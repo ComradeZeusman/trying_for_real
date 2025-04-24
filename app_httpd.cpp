@@ -822,8 +822,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
             httpd_resp_set_type(req, "application/json");
             return httpd_resp_send(req, json_response, strlen(json_response));
         }
-    }
-    else if(!strcmp(variable, "servo_center")) {
+    }    else if(!strcmp(variable, "servo_center")) {
         // Center both servos (move to 90 degrees)
         extern int panPosition;
         extern int tiltPosition;
@@ -839,6 +838,15 @@ static esp_err_t cmd_handler(httpd_req_t *req){
             panPosition, tiltPosition);
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_send(req, json_response, strlen(json_response));
+    }    else if(!strcmp(variable, "flash")) {
+        // Control the flash LED using the already defined FLASH_LED_PIN macro
+        digitalWrite(FLASH_LED_PIN, val > 0 ? HIGH : LOW);
+        
+        char msg[100];
+        snprintf(msg, sizeof(msg), "Flash LED turned %s", val > 0 ? "ON" : "OFF");
+        log_activity(msg);
+        
+        return httpd_resp_send(req, "OK", 2);
     }
     else {
         res = -1;

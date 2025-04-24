@@ -516,6 +516,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             <button onclick="openSettings()">Camera Settings</button>
             <button onclick="window.location.href='/register'">Add New User</button>
             <button id="reportBtn" onclick="generateReport()">Generate System Report</button>
+            <button id="flashBtn" onclick="toggleFlash()">Turn Flash On</button>
         </div>
 
         <div class="servo-control-panel">
@@ -754,9 +755,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     }
                 })
                 .catch(error => console.error('Error:', error));
-        }
-
-        function centerServo() {
+        }        function centerServo() {
             fetch(baseHost + '/control?var=servo_center&val=1')
                 .then(response => response.json())
                 .then(data => {
@@ -764,6 +763,17 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                         document.getElementById('panPositionDisplay').textContent = data.pan_pos + '°';
                         document.getElementById('tiltPositionDisplay').textContent = data.tilt_pos + '°';
                     }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+        
+        // Flash control functionality
+        let flashOn = false;
+        function toggleFlash() {
+            flashOn = !flashOn;
+            fetch(baseHost + '/control?var=flash&val=' + (flashOn ? '1' : '0'))
+                .then(response => {
+                    document.getElementById('flashBtn').textContent = flashOn ? 'Turn Flash Off' : 'Turn Flash On';
                 })
                 .catch(error => console.error('Error:', error));
         }

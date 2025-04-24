@@ -43,6 +43,9 @@ const int CENTER_THRESHOLD = 40; // How many pixels from center before we move t
 // Flag to control whether servo auto-tracks faces
 bool autoTrackingEnabled = true;  // Default to auto tracking enabled
 
+// Flash control pin (GPIO4 for AI Thinker ESP32-CAM)
+#define FLASH_LED_PIN 4
+
 // Camera frame parameters
 const int CAMERA_CENTER_X = 160; // Assuming QVGA (320x240) with X center at 160
 const int CAMERA_CENTER_Y = 120; // Assuming QVGA (320x240) with Y center at 120
@@ -102,15 +105,14 @@ void moveServoToTrackFace() {
     // Update the pan servo position
     panServo.write(panPosition);
   }
-  
-  if (abs(offsetY) > CENTER_THRESHOLD) {
-    // Face is above center, move tilt servo clockwise
-    if (offsetY > 0 && tiltPosition < SERVO_MAX) {
-      tiltPosition += SERVO_STEP;
-    } 
-    // Face is below center, move tilt servo counterclockwise
-    else if (offsetY < 0 && tiltPosition > SERVO_MIN) {
+    if (abs(offsetY) > CENTER_THRESHOLD) {
+    // Face is above center, move tilt servo counterclockwise (inverted logic)
+    if (offsetY > 0 && tiltPosition > SERVO_MIN) {
       tiltPosition -= SERVO_STEP;
+    } 
+    // Face is below center, move tilt servo clockwise (inverted logic)
+    else if (offsetY < 0 && tiltPosition < SERVO_MAX) {
+      tiltPosition += SERVO_STEP;
     }
     
     // Constrain tilt servo position to valid range
@@ -141,6 +143,10 @@ void setup() {
   Serial.println();
 
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
+  
+  // Initialize flash LED pin
+  pinMode(FLASH_LED_PIN, OUTPUT);
+  digitalWrite(FLASH_LED_PIN, LOW); // Flash off by default
   
   // Initialize SPIFFS for user data storage
   if (!SPIFFS.begin(true)) {
