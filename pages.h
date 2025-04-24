@@ -529,7 +529,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 <span>Auto Face Tracking</span>
             </div>        <div class="servo-buttons">
             <div class="tilt-controls">
-                <button onclick="moveServo(0,10)" class="servo-btn">▲ Up</button>
+                <button onclick="moveServo(0,10)" class="servo-btn">▲ Down</button>
             </div>
             <div class="pan-controls">
                 <button onclick="moveServo(-10,0)" class="servo-btn">◀ Left</button>
@@ -537,7 +537,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 <button onclick="moveServo(10,0)" class="servo-btn">Right ▶</button>
             </div>
             <div class="tilt-controls">
-                <button onclick="moveServo(0,-10)" class="servo-btn">▼ Down</button>
+                <button onclick="moveServo(0,-10)" class="servo-btn">▼ Up</button>
             </div>
         </div>
         <div class="servo-positions">
