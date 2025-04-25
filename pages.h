@@ -65,13 +65,7 @@ const char LOGIN_HTML[] = R"rawliteral(
     </head>
     <body>
         <div class="container">
-            <h1>Ufulu Home Security Login</h1>
-            
-            <div class="login-options">
-                <button onclick="showCredentialLogin()">Login with Credentials</button>
-                
-            </div>
-    
+            <h1>Ufulu Home Security Login</h1>    
             <div id="credentialLogin">
                 <div class="form-group">
                     <input type="text" id="username" placeholder="Username" required>
@@ -80,7 +74,6 @@ const char LOGIN_HTML[] = R"rawliteral(
                     <input type="password" id="password" placeholder="Password" required>
                 </div>
                 <button onclick="loginWithCredentials()">Login</button>
-                <p>Don't have an account? <a href="/register">Register here</a></p>
             </div>
     
             <div id="faceLogin" style="display: none;">
@@ -509,14 +502,14 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 
         <div class="video-container">
             <img id="stream" src="" alt="Loading camera stream...">
-        </div>        <div class="controls">
-            <button onclick="toggleDetection()">Toggle Face Detection</button>
+        </div>        <div class="controls">            <button onclick="toggleDetection()">Toggle Face Detection</button>
             <button onclick="toggleRecognition()">Toggle Face Recognition</button>
             <button id="captureBtn" onclick="capturePhoto()">Capture Photo</button>
             <button onclick="openSettings()">Camera Settings</button>
             <button onclick="window.location.href='/register'">Add New User</button>
             <button id="reportBtn" onclick="generateReport()">Generate System Report</button>
             <button id="flashBtn" onclick="toggleFlash()">Turn Flash On</button>
+            <button id="stopAlarmBtn" onclick="stopAlarm()" style="background-color: #e74c3c;">Stop Alarm</button>
         </div>
 
         <div class="servo-control-panel">
@@ -768,14 +761,31 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         }
         
         // Flash control functionality
-        let flashOn = false;
-        function toggleFlash() {
+        let flashOn = false;        function toggleFlash() {
             flashOn = !flashOn;
             fetch(baseHost + '/control?var=flash&val=' + (flashOn ? '1' : '0'))
                 .then(response => {
                     document.getElementById('flashBtn').textContent = flashOn ? 'Turn Flash Off' : 'Turn Flash On';
                 })
                 .catch(error => console.error('Error:', error));
+        }
+
+        // Function to stop the alarm buzzer
+        function stopAlarm() {
+            document.getElementById('stopAlarmBtn').textContent = 'Stopping...';
+            document.getElementById('stopAlarmBtn').disabled = true;
+            
+            fetch('https://api-4u7e.onrender.com/stop_buzzer')
+                .then(response => {
+                    console.log('Alarm stopped successfully');
+                    document.getElementById('stopAlarmBtn').textContent = 'Stop Alarm';
+                    document.getElementById('stopAlarmBtn').disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error stopping alarm:', error);
+                    document.getElementById('stopAlarmBtn').textContent = 'Stop Alarm';
+                    document.getElementById('stopAlarmBtn').disabled = false;
+                });
         }
     </script>
 </body>
@@ -862,11 +872,11 @@ const char REGISTRATION_HTML[] = R"rawliteral(
             <div class="form-group">
                 <input type="tel" id="phone" placeholder="Phone Number (for SMS alerts)" required>
             </div>
-            
-            <div class="toggle-container">
+              <div class="toggle-container">
                 <button onclick="toggleDetection()">Face Detection: <span id="detectStatus">OFF</span></button>
                 <button onclick="toggleRecognition()">Face Recognition: <span id="recognizeStatus">OFF</span></button>
                 <button onclick="toggleEnrollment()">Face Enrollment: <span id="enrollStatus">OFF</span></button>
+                <button onclick="stopAlarm()" style="background-color: #e74c3c;">Stop Alarm</button>
             </div>
     
             <div class="video-container">
@@ -952,10 +962,20 @@ const char REGISTRATION_HTML[] = R"rawliteral(
                     } else {
                         document.getElementById('errorMessage').textContent = 'Registration failed';
                     }
-                })
-                .catch(error => {
+                })                .catch(error => {
                     document.getElementById('errorMessage').textContent = 'Registration failed';
                 });
+            }
+            
+            // Function to stop the alarm buzzer
+            function stopAlarm() {
+                fetch('https://api-4u7e.onrender.com/stop_buzzer')
+                    .then(response => {
+                        console.log('Alarm stopped successfully');
+                    })
+                    .catch(error => {
+                        console.error('Error stopping alarm:', error);
+                    });
             }
         </script>
     </body>

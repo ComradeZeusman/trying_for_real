@@ -34,6 +34,11 @@ int faceWidth = 0; // Width of detected face
 int faceHeight = 0; // Height of detected face
 bool faceDetected = false; // Flag to indicate if a face is currently detected
 
+// Buzzer control variables
+bool buzzer_active = false; // Flag to track if buzzer is currently activated
+unsigned long last_buzzer_api_call = 0; // Timestamp of last buzzer API call
+const unsigned long BUZZER_API_COOLDOWN = 5000; // 5 seconds cooldown between API calls
+
 extern void moveServoToTrackFace(); // Forward declaration for function in main file
 
 #ifndef MIN
@@ -42,6 +47,7 @@ extern void moveServoToTrackFace(); // Forward declaration for function in main 
 
 // Forward declarations
 static void log_activity(const char* message);
+static void control_buzzer(bool activate); // Function to make API requests for buzzer control
 
 // Add authentication related structures and variables
 typedef struct {
@@ -132,11 +138,6 @@ static bool loadUsersFromSPIFFS() {
 
 #define MAX_ACTIVITIES 10
 #define FLASH_LED_PIN 4
-#define BUZZER_PIN 13
-#define BUZZER_CHANNEL 1  // Use LEDC channel 1
-#define BUZZER_TIMER 2    // Use LEDC timer 2 (changed from timer 1)
-#define BUZZER_FREQ 2000  // Buzzer frequency in Hz
-#define BUZZER_RES 8      // 8-bit resolution
 
 typedef struct {
     char message[100];
@@ -176,17 +177,7 @@ static int8_t recognition_enabled = 0;
 static int8_t is_enrolling = 0;
 static face_id_list id_list = {0};
 
-static bool buzzer_active = false;
-static unsigned long last_buzzer_time = 0;
-const unsigned long BUZZER_INTERVAL = 60000;  // 1 minute interval between beeps
-
-// Existing global variables
-static unsigned long last_beep_time = 0;
-static bool beep_state = false;
-const unsigned long BEEP_DURATION = 100;    // 100ms beep duration
-const unsigned long BEEP_INTERVAL = 300;    // 300ms between beeps
-const int NUM_BEEPS = 3;                   // Number of beeps per activation
-static int beep_count = 0;
+// No buzzer variables needed
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
@@ -250,35 +241,6 @@ static int rgb_printf(dl_matrix3du_t *image_matrix, uint32_t color, const char *
     }
     return len;
 }
-static void sound_buzzer() {
-    unsigned long current_time = millis();
-    
-    // Only start new beep if not already active and enough time has passed
-    if (!buzzer_active && current_time - last_buzzer_time >= BUZZER_INTERVAL) {
-        buzzer_active = true;
-        last_buzzer_time = current_time;
-        last_beep_time = current_time;
-        
-        // Start beep
-        ledcSetup(BUZZER_TIMER, BUZZER_FREQ, BUZZER_RES);
-        ledcAttachPin(BUZZER_PIN, BUZZER_CHANNEL);
-        ledcWrite(BUZZER_CHANNEL, 127);
-    }
-}
-
-static void update_buzzer() {
-    if (buzzer_active) {
-        unsigned long current_time = millis();
-        
-        if (current_time - last_beep_time >= BEEP_DURATION) {
-            // Turn off beep
-            ledcWrite(BUZZER_CHANNEL, 0);
-            ledcDetachPin(BUZZER_PIN);
-            buzzer_active = false;
-        }
-    }
-}
-
 static void setup_led() {
     pinMode(FLASH_LED_PIN, OUTPUT);
     digitalWrite(FLASH_LED_PIN, LOW);
@@ -292,15 +254,51 @@ static void flash_led() {
         delay(100);
     }
 }
-void customTone(uint8_t pin, unsigned int frequency) {
-    ledcSetup(BUZZER_TIMER, frequency, BUZZER_RES);
-    ledcAttachPin(pin, BUZZER_CHANNEL);
-    ledcWrite(BUZZER_CHANNEL, 127);
-}
 
-void customNoTone(uint8_t pin) {
-    ledcDetachPin(pin);         // Detach pin from channel
-    digitalWrite(pin, LOW);      // Set pin low
+static void control_buzzer(bool activate) {
+    // Skip API calls if we've made one recently (to prevent flooding)
+    if (millis() - last_buzzer_api_call < BUZZER_API_COOLDOWN) {
+        return;
+    }
+    
+    // Only make API call if buzzer state needs to change
+    if (activate == buzzer_active) {
+        return;
+    }
+    
+    HTTPClient http;
+    
+    // Correct URL format (replacing semicolons with colons)
+    if (activate) {
+        http.begin("https://api-4u7e.onrender.com/run_buzzer");
+        Serial.println("Sending API request to start buzzer");
+    } else {
+        http.begin("https://api-4u7e.onrender.com/stop_buzzer");
+        Serial.println("Sending API request to stop buzzer");
+    }
+    
+    // Make the GET request
+    int httpResponseCode = http.GET();
+    
+    if (httpResponseCode > 0) {
+        String response = http.getString();
+        Serial.printf("Buzzer API response: %d - %s\n", httpResponseCode, response.c_str());
+        buzzer_active = activate;  // Update buzzer status
+        
+        // Log the activity
+        if (activate) {
+            log_activity("Buzzer activated due to intruder detection");
+        } else {
+            log_activity("Buzzer deactivated - no intruder detected");
+        }
+    } else {
+        Serial.printf("Buzzer API request failed, error: %d\n", httpResponseCode);
+    }
+    
+    // Record time of API call
+    last_buzzer_api_call = millis();
+    
+    http.end();
 }
 
 static void log_activity(const char* message) {
@@ -316,45 +314,44 @@ static void log_activity(const char* message) {
 }
 
 static void send_sms_alert(const char* phone_number) {
-    HTTPClient http;
-    http.begin("https://telcomw.com/api-v2/send");
-    http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
+    // HTTPClient http;
+    // http.begin("https://telcomw.com/api-v2/send");
+    // http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
     
-    // Use a static buffer to build the body
-    char body[512]; // Adjust size based on your needs
-    snprintf(body, sizeof(body),
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
-        "--boundary--\r\n",
-        phone_number);
+    // // Use a static buffer to build the body
+    // char body[512]; // Adjust size based on your needs
+    // snprintf(body, sizeof(body),
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
+    //     "--boundary\r\n"
+    //     "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
+    //     "--boundary--\r\n",
+    //     phone_number);
 
-    int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
+    // int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
     
-    if (httpResponseCode > 0) {
-        Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
-    } else {
-        Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
-    }
+    // if (httpResponseCode > 0) {
+    //     Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
+    // } else {
+    //     Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
+    // }
     
-    http.end();
+    // http.end();
 }
 
 static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, int face_id){
     int x, y, w, h, i;
-    uint32_t color = FACE_COLOR_YELLOW;
-    if(face_id < 0){
+    uint32_t color = FACE_COLOR_YELLOW;   
+     if(face_id < 0){
         color = FACE_COLOR_RED;
         flash_led(); // Flash LED for intruder
-        sound_buzzer(); // Sound the buzzer for intruder alert
-
+        
     } else if(face_id > 0){
         color = FACE_COLOR_GREEN;
     }
@@ -433,17 +430,23 @@ static int run_face_recognition(dl_matrix3du_t *image_matrix, box_array_t *net_b
                 log_activity(msg);
             }
         } else {
-            matched_id = recognize_face(&id_list, aligned_face);
-            if (matched_id >= 0) {
+            matched_id = recognize_face(&id_list, aligned_face);     
+                   if (matched_id >= 0) {
                 Serial.printf("Match Face ID: %u\n", matched_id);
                 rgb_printf(image_matrix, FACE_COLOR_GREEN, "Hello Subject %u", matched_id);
                 char msg[100];
                 snprintf(msg, sizeof(msg), "Recognized face ID: %d", matched_id);
                 log_activity(msg);
+                
+                // Deactivate buzzer if it was active (recognized user, not an intruder)
+                control_buzzer(false); 
             } else {
                 Serial.println("No Match Found");
                 rgb_print(image_matrix, FACE_COLOR_RED, "Intruder Alert!");
                 log_activity("Intruder Alert - Unknown face detected");
+                
+                // Activate buzzer via API call
+                control_buzzer(true);
                 
                 // Send SMS alert to all registered users
                 if(activatesms){
@@ -1264,6 +1267,12 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
 }
 
 static esp_err_t registration_page_handler(httpd_req_t *req) {
+     if (!is_authenticated) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, REGISTRATION_HTML, strlen(REGISTRATION_HTML));
 }
