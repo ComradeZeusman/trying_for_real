@@ -325,35 +325,35 @@ void check_buzzer_auto_turnoff() {
 }
 
 static void send_sms_alert(const char* phone_number) {
-    // HTTPClient http;
-    // http.begin("https://telcomw.com/api-v2/send");
-    // http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
+    HTTPClient http;
+    http.begin("https://telcomw.com/api-v2/send");
+    http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
     
-    // // Use a static buffer to build the body
-    // char body[512]; // Adjust size based on your needs
-    // snprintf(body, sizeof(body),
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
-    //     "--boundary\r\n"
-    //     "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
-    //     "--boundary--\r\n",
-    //     phone_number);
+    // Use a static buffer to build the body
+    char body[512]; // Adjust size based on your needs
+    snprintf(body, sizeof(body),
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
+        "--boundary\r\n"
+        "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
+        "--boundary--\r\n",
+        phone_number);
 
-    // int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
+    int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
     
-    // if (httpResponseCode > 0) {
-    //     Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
-    // } else {
-    //     Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
-    // }
+    if (httpResponseCode > 0) {
+        Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
+    } else {
+        Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
+    }
     
-    // http.end();
+    http.end();
 }
 
 static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, int face_id){
@@ -1050,12 +1050,12 @@ static esp_err_t check_auth_handler(httpd_req_t *req) {
 }
 
 static esp_err_t dashboard_handler(httpd_req_t *req) {
-    if (!is_authenticated) {
-        httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/");
-        httpd_resp_send(req, NULL, 0);
-        return ESP_OK;
-    }
+    // if (!is_authenticated) {
+    //     httpd_resp_set_status(req, "302 Found");
+    //     httpd_resp_set_hdr(req, "Location", "/");
+    //     httpd_resp_send(req, NULL, 0);
+    //     return ESP_OK;
+    // }
     
     // Check if this is a capture request
     char* buf = NULL;
