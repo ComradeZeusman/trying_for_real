@@ -37,7 +37,9 @@ bool faceDetected = false; // Flag to indicate if a face is currently detected
 // Buzzer control variables
 bool buzzer_active = false; // Flag to track if buzzer is currently activated
 unsigned long last_buzzer_api_call = 0; // Timestamp of last buzzer API call
+unsigned long buzzer_activation_time = 0; // Timestamp when the buzzer was last activated
 const unsigned long BUZZER_API_COOLDOWN = 5000; // 5 seconds cooldown between API calls
+const unsigned long BUZZER_AUTO_TURNOFF_DELAY = 10000; // 10 seconds auto-turnoff
 
 extern void moveServoToTrackFace(); // Forward declaration for function in main file
 
@@ -48,6 +50,7 @@ extern void moveServoToTrackFace(); // Forward declaration for function in main 
 // Forward declarations
 static void log_activity(const char* message);
 static void control_buzzer(bool activate); // Function to make API requests for buzzer control
+void check_buzzer_auto_turnoff(); // Function to check if buzzer should be turned off automatically (made public for use in main sketch)
 
 // Add authentication related structures and variables
 typedef struct {
@@ -282,11 +285,11 @@ static void control_buzzer(bool activate) {
     
     if (httpResponseCode > 0) {
         String response = http.getString();
-        Serial.printf("Buzzer API response: %d - %s\n", httpResponseCode, response.c_str());
-        buzzer_active = activate;  // Update buzzer status
+        Serial.printf("Buzzer API response: %d - %s\n", httpResponseCode, response.c_str());        buzzer_active = activate;  // Update buzzer status
         
         // Log the activity
         if (activate) {
+            buzzer_activation_time = millis(); // Record when buzzer was activated
             log_activity("Buzzer activated due to intruder detection");
         } else {
             log_activity("Buzzer deactivated - no intruder detected");
@@ -311,6 +314,14 @@ static void log_activity(const char* message) {
     }
     strncpy(activities[0].message, message, sizeof(activities[0].message) - 1);
     activities[0].timestamp = millis();
+}
+
+void check_buzzer_auto_turnoff() {
+    // Check if buzzer is active and if the auto-turnoff time has passed
+    if (buzzer_active && (millis() - buzzer_activation_time >= BUZZER_AUTO_TURNOFF_DELAY)) {
+        Serial.println("Auto-turnoff: Buzzer has been active for 10 seconds, turning off");
+        control_buzzer(false);
+    }
 }
 
 static void send_sms_alert(const char* phone_number) {
@@ -481,6 +492,9 @@ static size_t jpg_encode_stream(void * arg, size_t index, const void* data, size
 }
 
 static esp_err_t capture_handler(httpd_req_t *req){
+    // Check if buzzer should be turned off automatically
+    check_buzzer_auto_turnoff();
+    
     camera_fb_t * fb = NULL;
     esp_err_t res = ESP_OK;
     int64_t fr_start = esp_timer_get_time();
@@ -592,9 +606,10 @@ static esp_err_t stream_handler(httpd_req_t *req){
         return res;
     }
 
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-
-    while(true){
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");    while(true){
+        // Check if buzzer should be turned off automatically
+        check_buzzer_auto_turnoff();
+        
         detected = false;
         face_id = 0;
         fb = esp_camera_fb_get();
@@ -864,6 +879,9 @@ static esp_err_t cmd_handler(httpd_req_t *req){
 }
 
 static esp_err_t status_handler(httpd_req_t *req){
+    // Check if buzzer should be turned off automatically
+    check_buzzer_auto_turnoff();
+    
     static char json_response[2048];  // Increased buffer size
 
     sensor_t * s = esp_camera_sensor_get();
@@ -907,11 +925,23 @@ static esp_err_t status_handler(httpd_req_t *req){
     p+=sprintf(p, "\"lenc\":%u,", s->status.lenc);
     p+=sprintf(p, "\"vflip\":%u,", s->status.vflip);
     p+=sprintf(p, "\"hmirror\":%u,", s->status.hmirror);
-    p+=sprintf(p, "\"dcw\":%u,", s->status.dcw);
-    p+=sprintf(p, "\"colorbar\":%u,", s->status.colorbar);
+    p+=sprintf(p, "\"dcw\":%u,", s->status.dcw);    p+=sprintf(p, "\"colorbar\":%u,", s->status.colorbar);
     p+=sprintf(p, "\"face_detect\":%u,", detection_enabled);
     p+=sprintf(p, "\"face_enroll\":%u,", is_enrolling);
-    p+=sprintf(p, "\"face_recognize\":%u", recognition_enabled);
+    p+=sprintf(p, "\"face_recognize\":%u,", recognition_enabled);
+    
+    // Add buzzer info
+    p+=sprintf(p, "\"buzzer_active\":%s,", buzzer_active ? "true" : "false");
+    if (buzzer_active) {
+        unsigned long buzzer_active_time = (millis() - buzzer_activation_time) / 1000;
+        unsigned long auto_off_in = (BUZZER_AUTO_TURNOFF_DELAY / 1000) - buzzer_active_time;
+        p+=sprintf(p, "\"buzzer_active_for\":%lu,", buzzer_active_time);
+        p+=sprintf(p, "\"buzzer_auto_off_in\":%lu", auto_off_in > 0 ? auto_off_in : 0);
+    } else {
+        p+=sprintf(p, "\"buzzer_active_for\":0,");
+        p+=sprintf(p, "\"buzzer_auto_off_in\":0");
+    }
+    
     *p++ = '}';
     *p++ = 0;
     httpd_resp_set_type(req, "application/json");

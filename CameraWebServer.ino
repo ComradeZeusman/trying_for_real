@@ -256,7 +256,13 @@ void setServoPositions(int pan, int tilt) {
   tiltServo.write(tiltPosition);
 }
 
+// Forward declaration of check_buzzer_auto_turnoff from app_httpd.cpp
+extern void check_buzzer_auto_turnoff();
+
 void loop() {
+  // Check if buzzer should be automatically turned off
+  check_buzzer_auto_turnoff();
+  
   // The face detection and tracking mainly happens in the HTTP server task
   // Inside the draw_face_boxes() function, which calls moveServoToTrackFace()
   
