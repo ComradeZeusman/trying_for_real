@@ -1050,12 +1050,12 @@ static esp_err_t check_auth_handler(httpd_req_t *req) {
 }
 
 static esp_err_t dashboard_handler(httpd_req_t *req) {
-    // if (!is_authenticated) {
-    //     httpd_resp_set_status(req, "302 Found");
-    //     httpd_resp_set_hdr(req, "Location", "/");
-    //     httpd_resp_send(req, NULL, 0);
-    //     return ESP_OK;
-    // }
+    if (!is_authenticated) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
     
     // Check if this is a capture request
     char* buf = NULL;
