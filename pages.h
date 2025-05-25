@@ -2,22 +2,23 @@ const char LOGIN_HTML[] = R"rawliteral(
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Ufulu Home Security Login</title>
+        <title>SecurEye Pro Security Login</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {
                 font-family: Arial, sans-serif;
                 margin: 20px;
                 text-align: center;
-                background-color: #f0f0f0;
+                background-color: #121f2d;
+                color: #eaeaea;
             }
             .container {
                 max-width: 800px;
                 margin: 0 auto;
-                background: white;
+                background: #212d3a;
                 padding: 20px;
                 border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
             }
             .form-group {
                 margin: 15px 0;
@@ -26,11 +27,13 @@ const char LOGIN_HTML[] = R"rawliteral(
                 width: 100%;
                 padding: 8px;
                 margin: 5px 0;
-                border: 1px solid #ddd;
+                border: 1px solid #455a74;
                 border-radius: 4px;
+                background-color: #2a3950;
+                color: #eaeaea;
             }
             button {
-                background-color: #3498db;
+                background-color: #1e88e5;
                 color: white;
                 padding: 10px 20px;
                 border: none;
@@ -39,7 +42,7 @@ const char LOGIN_HTML[] = R"rawliteral(
                 margin: 5px;
             }
             button:hover {
-                background-color: #2980b9;;
+                background-color: #0d47a1;
             }
             .login-options {
                 display: flex;
@@ -58,14 +61,14 @@ const char LOGIN_HTML[] = R"rawliteral(
                 border-radius: 4px;
             }
             .error-message {
-                color: red;
+                color: #ff5252;
                 margin: 10px 0;
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Ufulu Home Security Login</h1>    
+            <h1>SecurEye Pro Security Login</h1>    
             <div id="credentialLogin">
                 <div class="form-group">
                     <input type="text" id="username" placeholder="Username" required>
@@ -75,21 +78,12 @@ const char LOGIN_HTML[] = R"rawliteral(
                 </div>
                 <button onclick="loginWithCredentials()">Login</button>
             </div>
-    
-            <div id="faceLogin" style="display: none;">
-                <div class="video-container" id="videoContainer">
-                    <img id="stream" src="" alt="Loading camera stream...">
-                </div>
-                <button onclick="startFaceLogin()">Start Face Detection</button>
-            </div>
-    
+
             <div id="errorMessage" class="error-message"></div>
         </div>
-    
+
         <script>
             var baseHost = document.location.origin;
-            var streamUrl = baseHost + ':81/stream';
-            var faceDetectionActive = false;
 
             // Check if already authenticated
             fetch(baseHost + '/check-auth')
@@ -98,54 +92,6 @@ const char LOGIN_HTML[] = R"rawliteral(
                         window.location.href = '/dashboard';
                     }
                 });
-    
-            function showCredentialLogin() {
-                document.getElementById('credentialLogin').style.display = 'block';
-                document.getElementById('faceLogin').style.display = 'none';
-                stopFaceDetection();
-            }
-    
-            function showFaceLogin() {
-                document.getElementById('credentialLogin').style.display = 'none';
-                document.getElementById('faceLogin').style.display = 'block';
-                document.getElementById('videoContainer').style.display = 'block';
-                document.getElementById('stream').src = streamUrl;
-            }
-    
-            function startFaceLogin() {
-                faceDetectionActive = true;
-                fetch(baseHost + '/control?var=face_detect&val=1')
-                    .then(response => response.text())
-                    .then(() => {
-                        return fetch(baseHost + '/control?var=face_recognize&val=1');
-                    })
-                    .then(response => response.text())
-                    .then(() => {
-                        checkFaceRecognition();
-                    });
-            }
-    
-            function stopFaceDetection() {
-                faceDetectionActive = false;
-                fetch(baseHost + '/control?var=face_detect&val=0')
-                    .then(() => {
-                        fetch(baseHost + '/control?var=face_recognize&val=0');
-                    });
-            }
-    
-            function checkFaceRecognition() {
-                if (!faceDetectionActive) return;
-                
-                fetch(baseHost + '/status')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.face_detect && data.face_recognized) {
-                            window.location.href = '/dashboard';
-                        } else {
-                            setTimeout(checkFaceRecognition, 1000);
-                        }
-                    });
-            }
     
             function loginWithCredentials() {
                 const username = document.getElementById('username').value;
@@ -183,7 +129,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ufulu Home Security Dashboard</title>
+    <title>SecurEye Pro Security Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
@@ -191,16 +137,17 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             font-family: 'Roboto', sans-serif;
             margin: 0;
             padding: 20px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: #121f2d;
             min-height: 100vh;
+            color: #eaeaea;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(33, 45, 58, 0.95);
             padding: 25px;
             border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
         .header {
             display: flex;
@@ -208,11 +155,11 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             align-items: center;
             margin-bottom: 30px;
             padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
+            border-bottom: 2px solid #2a3950;
         }
-        h1 {
+        h1, h2, h3 {
             margin: 0;
-            color: #2c3e50;
+            color: #1e88e5;
             font-weight: 500;
         }
         .dashboard-grid {
@@ -228,33 +175,34 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             margin: 20px 0;
         }
         .status-item {
-            background: #fff;
+            background: #182635;
             padding: 15px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
             text-align: center;
         }
         .status-item span {
             display: block;
             font-size: 1.2em;
             font-weight: 500;
-            color: #3498db;
+            color: #1e88e5;
             margin-top: 5px;
         }
         .video-container {
             background: #000;
             border-radius: 15px;
             overflow: hidden;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
             max-width: 480px;
             margin: 0 auto;
+            border: 2px solid #1e88e5;
         }
         #stream {
             width: 100%;
             display: block;
         }
         button {
-            background: #3498db;
+            background: #1e88e5;
             color: white;
             padding: 12px 25px;
             border: none;
@@ -267,15 +215,15 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             letter-spacing: 0.5px;
         }
         button:hover {
-            background: #2980b9;
+            background: #0d47a1;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         button.logout {
-            background: #e74c3c;
+            background: #e53935;
         }
         button.logout:hover {
-            background: #c0392b;
+            background: #b71c1c;
         }
         .controls {
             display: grid;
@@ -284,17 +232,17 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             margin: 20px 0;
         }
         .activity-log {
-            background: #fff;
+            background: #182635;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
             height: 300px;
             overflow-y: auto;
         }
         .activity-item {
             padding: 10px;
-            border-bottom: 1px solid #eee;
-            color: #34495e;
+            border-bottom: 1px solid #2a3950;
+            color: #eaeaea;
             font-size: 14px;
         }
         .activity-item:last-child {
@@ -307,19 +255,19 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.85);
             z-index: 1000;
             backdrop-filter: blur(5px);
         }
         .modal-content {
-            background: white;
+            background: #182635;
             margin: 5% auto;
             padding: 30px;
             width: 90%;
             max-width: 600px;
             border-radius: 15px;
             position: relative;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
         }
         .close {
             position: absolute;
@@ -328,11 +276,11 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
-            color: #666;
+            color: #888;
             transition: color 0.3s;
         }
         .close:hover {
-            color: #000;
+            color: #fff;
         }
         .settings-grid, .user-form {
             display: grid;
@@ -347,16 +295,31 @@ const char DASHBOARD_HTML[] = R"rawliteral(
         }
         .setting-item label {
             font-weight: 500;
-            color: #2c3e50;
+            color: #eaeaea;
         }
         .setting-item select, .setting-item input, .user-form input {
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid #2a3950;
             border-radius: 6px;
             font-size: 14px;
+            background: #212d3a;
+            color: #eaeaea;
         }
         .setting-item input[type="range"] {
             width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #2a3950;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .setting-item input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #1e88e5;
+            border-radius: 50%;
+            cursor: pointer;
         }
         /* User Management Modal Specific Styles */
         #addUserModal .modal-content {
@@ -371,7 +334,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             padding: 20px;
         }
         .user-form-camera {
-            background: #f8f9fa;
+            background: #212d3a;
             padding: 20px;
             border-radius: 10px;
         }
@@ -399,37 +362,60 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             font-weight: 500;
         }
         .status-badge.active {
-            background: #2ecc71;
-            color: white;
-        }        .status-badge.inactive {
-            background: #e74c3c;
+            background: #43a047;
             color: white;
         }
-        /* Servo control panel styles */
+        .status-badge.inactive {
+            background: #e53935;
+            color: white;
+        }
+        /* Servo control panel styles - Updated for sliders */
         .servo-control-panel {
-            background: #fff;
+            background: #182635;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
             margin: 20px 0;
         }
         .servo-control-panel h3 {
             margin-top: 0;
-            color: #2c3e50;
+            margin-bottom: 15px;
+            color: #1e88e5;
         }
         .servo-toggle {
             display: flex;
             align-items: center;
             gap: 10px;
+            margin-bottom: 20px;
+        }
+        .servo-sliders {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
             margin-bottom: 15px;
         }
-        .servo-buttons {
+        .servo-slider {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
             gap: 10px;
         }
-        .servo-btn {
-            flex: 1;
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider-container input {
+            flex-grow: 1;
+        }
+        .slider-value {
+            min-width: 50px;
+            text-align: center;
+            font-weight: bold;
+            color: #1e88e5;
+        }
+        .center-button {
+            text-align: center;
+            margin-top: 15px;
         }
         /* Toggle switch */
         .switch {
@@ -450,7 +436,7 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: #ccc;
+            background-color: #455a74;
             transition: .4s;
         }
         .slider:before {
@@ -464,10 +450,10 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             transition: .4s;
         }
         input:checked + .slider {
-            background-color: #3498db;
+            background-color: #1e88e5;
         }
         input:focus + .slider {
-            box-shadow: 0 0 1px #3498db;
+            box-shadow: 0 0 1px #1e88e5;
         }
         input:checked + .slider:before {
             transform: translateX(26px);
@@ -483,9 +469,11 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 <body>
     <div class="container">
         <div class="header">
-            <h1>Ufulu Home Security Dashboard</h1>
+            <h1>SecurEye Pro Security Dashboard</h1>
             <button class="logout" onclick="logout()">Logout</button>
-        </div>        <div class="status-bar">
+        </div>
+
+        <div class="status-bar">
             <div class="status-item">
                 System Uptime: <span id="uptime">0s</span>
             </div>
@@ -496,20 +484,26 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 Face Recognition: <span id="recognizeStatus">OFF</span>
             </div>
             <div class="status-item">
+                Recording: <span id="recordingStatus" style="color: #43a047;">OFF</span>
+            </div>
+            <div class="status-item">
                 Servo Position: <span id="servoPositionDisplay">90°</span>
             </div>
         </div>
 
         <div class="video-container">
             <img id="stream" src="" alt="Loading camera stream...">
-        </div>        <div class="controls">            <button onclick="toggleDetection()">Toggle Face Detection</button>
+        </div>
+
+        <div class="controls">
+            <button onclick="toggleDetection()">Toggle Face Detection</button>
             <button onclick="toggleRecognition()">Toggle Face Recognition</button>
             <button id="captureBtn" onclick="capturePhoto()">Capture Photo</button>
+            <button id="recordBtn" onclick="toggleRecording()" style="background-color: #43a047;">Start Recording</button>
             <button onclick="openSettings()">Camera Settings</button>
-            <button onclick="window.location.href='/register'">Add New User</button>
             <button id="reportBtn" onclick="generateReport()">Generate System Report</button>
             <button id="flashBtn" onclick="toggleFlash()">Turn Flash On</button>
-            <button id="stopAlarmBtn" onclick="stopAlarm()" style="background-color: #e74c3c;">Stop Alarm</button>
+            <button id="stopAlarmBtn" onclick="stopAlarm()" style="background-color: #e53935;">Stop Alarm</button>
         </div>
 
         <div class="servo-control-panel">
@@ -520,23 +514,33 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     <span class="slider round"></span>
                 </label>
                 <span>Auto Face Tracking</span>
-            </div>        <div class="servo-buttons">
-            <div class="tilt-controls">
-                <button onclick="moveServo(0,10)" class="servo-btn">▲ Down</button>
             </div>
-            <div class="pan-controls">
-                <button onclick="moveServo(-10,0)" class="servo-btn">◀ Left</button>
-                <button onclick="centerServo()" class="servo-btn">Center</button>
-                <button onclick="moveServo(10,0)" class="servo-btn">Right ▶</button>
+
+            <div class="servo-sliders">
+                <div class="servo-slider">
+                    <label for="panSlider">Pan Position (Left/Right):</label>
+                    <div class="slider-container">
+                        <span>0°</span>
+                        <input type="range" id="panSlider" min="0" max="180" value="90" step="1" oninput="updatePanPosition(this.value)">
+                        <span>180°</span>
+                        <span class="slider-value" id="panValue">90°</span>
+                    </div>
+                </div>
+                
+                <div class="servo-slider">
+                    <label for="tiltSlider">Tilt Position (Up/Down):</label>
+                    <div class="slider-container">
+                        <span>0°</span>
+                        <input type="range" id="tiltSlider" min="0" max="180" value="90" step="1" oninput="updateTiltPosition(this.value)">
+                        <span>180°</span>
+                        <span class="slider-value" id="tiltValue">90°</span>
+                    </div>
+                </div>
             </div>
-            <div class="tilt-controls">
-                <button onclick="moveServo(0,-10)" class="servo-btn">▼ Up</button>
+            
+            <div class="center-button">
+                <button onclick="centerServo()">Center Camera</button>
             </div>
-        </div>
-        <div class="servo-positions">
-            <span>Pan: <span id="panPositionDisplay">90°</span></span>
-            <span>Tilt: <span id="tiltPositionDisplay">90°</span></span>
-        </div>
         </div>
 
         <div class="activity-log">
@@ -579,15 +583,22 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 </div>
             </div>
         </div>
-    </div>    <script>
+    </div>
+
+    <script>
         var baseHost = document.location.origin;
         var streamUrl = baseHost + ':81/stream';
         var detection = false;
         var recognition = false;
         var autoTracking = true;
-        var servoPosition = 90; // Initial position
+        var panPosition = 90; // Initial pan position
+        var tiltPosition = 90; // Initial tilt position
 
         document.getElementById('stream').src = streamUrl;
+        document.getElementById('panSlider').value = panPosition;
+        document.getElementById('tiltSlider').value = tiltPosition;
+        document.getElementById('panValue').textContent = panPosition + '°';
+        document.getElementById('tiltValue').textContent = tiltPosition + '°';
 
         // Settings Modal
         function openSettings() {
@@ -624,7 +635,9 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                 .then(response => {
                     document.getElementById('recognizeStatus').textContent = recognition ? 'ON' : 'OFF';
                 });
-        }        function capturePhoto() {
+        }
+
+        function capturePhoto() {
             // Show loading indicator
             document.getElementById('captureBtn').textContent = 'Capturing...';
             document.getElementById('captureBtn').disabled = true;
@@ -639,14 +652,15 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
                     a.style.display = 'none';
                     a.href = url;
-                    a.download = 'esp32cam-capture-' + timestamp + '.jpg';
+                    a.download = 'secureyepro-capture-' + timestamp + '.jpg';
                     
                     // Append to the document, click it, and remove it
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                      // Reset button state
+
+                    // Reset button state
                     document.getElementById('captureBtn').textContent = 'Capture Photo';
                     document.getElementById('captureBtn').disabled = false;
                 })
@@ -655,7 +669,9 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     document.getElementById('captureBtn').textContent = 'Capture Photo';
                     document.getElementById('captureBtn').disabled = false;
                 });
-        }        function generateReport() {
+        }
+
+        function generateReport() {
             // Show loading indicator
             document.getElementById('reportBtn').textContent = 'Generating...';
             document.getElementById('reportBtn').disabled = true;
@@ -688,7 +704,9 @@ const char DASHBOARD_HTML[] = R"rawliteral(
             if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
             if (minutes > 0) return `${minutes}m ${secs}s`;
             return `${secs}s`;
-        }        function updateStatus() {
+        }
+
+        function updateStatus() {
             fetch(baseHost + '/dashboard?action=status')
                 .then(response => response.json())
                 .then(data => {
@@ -707,6 +725,24 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     document.getElementById('detectStatus').textContent = data.face_detect ? 'ON' : 'OFF';
                     document.getElementById('recognizeStatus').textContent = data.face_recognize ? 'ON' : 'OFF';
                     
+                    // Update recording status if available
+                    if (data.is_recording !== undefined) {
+                        const recordStatus = document.getElementById('recordingStatus');
+                        if (data.is_recording) {
+                            recordStatus.textContent = 'ON';
+                            recordStatus.style.color = '#e53935';
+                            document.getElementById('recordBtn').textContent = 'Stop Recording';
+                            document.getElementById('recordBtn').style.backgroundColor = '#e53935';
+                            isRecording = true;
+                        } else {
+                            recordStatus.textContent = 'OFF';
+                            recordStatus.style.color = '#43a047';
+                            document.getElementById('recordBtn').textContent = 'Start Recording';
+                            document.getElementById('recordBtn').style.backgroundColor = '#43a047';
+                            isRecording = false;
+                        }
+                    }
+                    
                     // Update camera settings in modal
                     document.getElementById('framesize').value = data.framesize;
                     document.getElementById('quality').value = data.quality;
@@ -717,7 +753,9 @@ const char DASHBOARD_HTML[] = R"rawliteral(
 
         // Update status every 5 seconds
         setInterval(updateStatus, 5000);
-        updateStatus(); // Initial update        // Check authentication status periodically
+        updateStatus(); // Initial update
+
+        // Check authentication status periodically
         function checkAuth() {
             fetch(baseHost + '/check-auth')
                 .then(response => {
@@ -738,36 +776,175 @@ const char DASHBOARD_HTML[] = R"rawliteral(
                     console.log('Auto tracking set to: ' + autoTracking);
                 })
                 .catch(error => console.error('Error:', error));
-        }        function moveServo(panChange, tiltChange) {
-            fetch(baseHost + '/control?var=servo_move&val=' + panChange + ',' + tiltChange)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.pan_pos !== undefined && data.tilt_pos !== undefined) {
-                        document.getElementById('panPositionDisplay').textContent = data.pan_pos + '°';
-                        document.getElementById('tiltPositionDisplay').textContent = data.tilt_pos + '°';
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-        }        function centerServo() {
+        }
+
+        // Updated servo control with fine adjustment via sliders
+        function updatePanPosition(value) {
+            panPosition = parseInt(value);
+            document.getElementById('panValue').textContent = panPosition + '°';
+            sendServoPositionUpdate();
+        }
+
+        function updateTiltPosition(value) {
+            tiltPosition = parseInt(value);
+            document.getElementById('tiltValue').textContent = tiltPosition + '°';
+            sendServoPositionUpdate();
+        }
+
+        // Debounce function to avoid too many servo updates
+        let servoUpdateTimeout = null;
+        function sendServoPositionUpdate() {
+            if (servoUpdateTimeout !== null) {
+                clearTimeout(servoUpdateTimeout);
+            }
+            
+            servoUpdateTimeout = setTimeout(() => {
+                fetch(baseHost + '/control?var=servo_position&val=' + panPosition + ',' + tiltPosition)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.pan_pos !== undefined && data.tilt_pos !== undefined) {
+                            // Update display values if the server returns different values
+                            if (data.pan_pos !== panPosition) {
+                                panPosition = data.pan_pos;
+                                document.getElementById('panSlider').value = panPosition;
+                                document.getElementById('panValue').textContent = panPosition + '°';
+                            }
+                            
+                            if (data.tilt_pos !== tiltPosition) {
+                                tiltPosition = data.tilt_pos;
+                                document.getElementById('tiltSlider').value = tiltPosition;
+                                document.getElementById('tiltValue').textContent = tiltPosition + '°';
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+                
+                servoUpdateTimeout = null;
+            }, 100); // 100ms debounce time
+        }
+
+        function centerServo() {
             fetch(baseHost + '/control?var=servo_center&val=1')
                 .then(response => response.json())
                 .then(data => {
                     if (data.pan_pos !== undefined && data.tilt_pos !== undefined) {
-                        document.getElementById('panPositionDisplay').textContent = data.pan_pos + '°';
-                        document.getElementById('tiltPositionDisplay').textContent = data.tilt_pos + '°';
+                        // Update sliders and displayed values
+                        panPosition = data.pan_pos;
+                        tiltPosition = data.tilt_pos;
+                        
+                        document.getElementById('panSlider').value = panPosition;
+                        document.getElementById('tiltSlider').value = tiltPosition;
+                        
+                        document.getElementById('panValue').textContent = panPosition + '°';
+                        document.getElementById('tiltValue').textContent = tiltPosition + '°';
                     }
                 })
                 .catch(error => console.error('Error:', error));
         }
         
         // Flash control functionality
-        let flashOn = false;        function toggleFlash() {
+        let flashOn = false;
+        function toggleFlash() {
             flashOn = !flashOn;
             fetch(baseHost + '/control?var=flash&val=' + (flashOn ? '1' : '0'))
                 .then(response => {
                     document.getElementById('flashBtn').textContent = flashOn ? 'Turn Flash Off' : 'Turn Flash On';
                 })
                 .catch(error => console.error('Error:', error));
+        }
+
+        // Video recording functionality
+        let isRecording = false;
+        let videoSocket = null;
+        
+        function toggleRecording() {
+            if (isRecording) {
+                // Stop recording
+                fetch(baseHost + '/control?var=record&val=0')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            isRecording = false;
+                            document.getElementById('recordBtn').textContent = 'Start Recording';
+                            document.getElementById('recordBtn').style.backgroundColor = '#43a047';
+                            if (videoSocket) {
+                                videoSocket.close();
+                                videoSocket = null;
+                            }
+                            showMessage('Recording stopped');
+                        } else {
+                            showMessage('Failed to stop recording: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error stopping recording:', error);
+                        showMessage('Error stopping recording');
+                    });
+            } else {
+                // Start recording
+                fetch(baseHost + '/control?var=record&val=1')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            isRecording = true;
+                            document.getElementById('recordBtn').textContent = 'Stop Recording';
+                            document.getElementById('recordBtn').style.backgroundColor = '#e53935';
+                            
+                            // Start WebSocket connection for streaming
+                            connectVideoWebSocket();
+                            showMessage('Recording started - Streaming to connected client');
+                        } else {
+                            showMessage('Failed to start recording: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error starting recording:', error);
+                        showMessage('Error starting recording');
+                    });
+            }
+        }
+        
+        function connectVideoWebSocket() {
+            // Close existing connection if any
+            if (videoSocket) {
+                videoSocket.close();
+            }
+            
+            // Create WebSocket connection for video streaming
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = wsProtocol + '//' + window.location.host + '/ws_video';
+            
+            videoSocket = new WebSocket(wsUrl);
+            
+            videoSocket.onopen = function() {
+                console.log('Video WebSocket connection established');
+            };
+            
+            videoSocket.onclose = function() {
+                console.log('Video WebSocket connection closed');
+                // If we're still recording when the socket closes unexpectedly, try to reconnect
+                if (isRecording) {
+                    setTimeout(connectVideoWebSocket, 2000);
+                }
+            };
+            
+            videoSocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        // Helper function to show status messages
+        function showMessage(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const activityLog = document.querySelector('.activity-log');
+            if (activityLog) {
+                const messageItem = document.createElement('div');
+                messageItem.className = 'activity-item';
+                messageItem.textContent = `[${timestamp}] ${message}`;
+                activityLog.insertBefore(messageItem, activityLog.firstChild);
+            } else {
+                console.log(message);
+            }
         }
 
         // Function to stop the alarm buzzer
@@ -790,194 +967,4 @@ const char DASHBOARD_HTML[] = R"rawliteral(
     </script>
 </body>
 </html>
-)rawliteral";
-
-const char REGISTRATION_HTML[] = R"rawliteral(
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Ufulu Home Security Registration</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 20px;
-                text-align: center;
-                background-color: #f0f0f0;
-            }
-            .container {
-                max-width: 800px;
-                margin: 0 auto;
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .form-group {
-                margin: 15px 0;
-            }
-            input[type="text"], input[type="password"], input[type="email"], input[type="tel"] {
-                width: 100%;
-                padding: 8px;
-                margin: 5px 0;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            button {
-                background-color:#3498db;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                margin: 5px;
-            }
-            button:hover {
-                background-color: #2980b9;;
-            }
-            .video-container {
-                margin: 20px 0;
-            }
-            #stream {
-                width: 100%;
-                max-width: 800px;
-                height: auto;
-                border-radius: 4px;
-            }
-            .toggle-container {
-                display: flex;
-                justify-content: center;
-                gap: 10px;
-                margin: 15px 0;
-            }
-            .error-message {
-                color: red;
-                margin: 10px 0;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Ufulu Home Security Registration</h1>
-            
-            <div class="form-group">
-                <input type="text" id="username" placeholder="Username" required>
-            </div>
-            <div class="form-group">
-                <input type="password" id="password" placeholder="Password" required>
-            </div>
-            <div class="form-group">
-                <input type="email" id="email" placeholder="Email Address" required>
-            </div>
-            <div class="form-group">
-                <input type="tel" id="phone" placeholder="Phone Number (for SMS alerts)" required>
-            </div>
-              <div class="toggle-container">
-                <button onclick="toggleDetection()">Face Detection: <span id="detectStatus">OFF</span></button>
-                <button onclick="toggleRecognition()">Face Recognition: <span id="recognizeStatus">OFF</span></button>
-                <button onclick="toggleEnrollment()">Face Enrollment: <span id="enrollStatus">OFF</span></button>
-                <button onclick="stopAlarm()" style="background-color: #e74c3c;">Stop Alarm</button>
-            </div>
-    
-            <div class="video-container">
-                <img id="stream" src="" alt="Loading camera stream...">
-            </div>
-    
-            <button onclick="registerUser()">Register</button>
-            <div id="errorMessage" class="error-message"></div>
-        </div>
-    
-        <script>
-            var baseHost = document.location.origin;
-            var streamUrl = baseHost + ':81/stream';
-            var detection = false;
-            var recognition = false;
-            var enrollment = false;
-    
-            document.getElementById('stream').src = streamUrl;
-    
-            function toggleDetection() {
-                detection = !detection;
-                fetch(baseHost + '/control?var=face_detect&val=' + (detection ? '1' : '0'))
-                    .then(response => {
-                        document.getElementById('detectStatus').textContent = detection ? 'ON' : 'OFF';
-                    });
-            }
-    
-            function toggleRecognition() {
-                recognition = !recognition;
-                fetch(baseHost + '/control?var=face_recognize&val=' + (recognition ? '1' : '0'))
-                    .then(response => {
-                        document.getElementById('recognizeStatus').textContent = recognition ? 'ON' : 'OFF';
-                    });
-            }
-    
-            function toggleEnrollment() {
-                enrollment = !enrollment;
-                fetch(baseHost + '/control?var=face_enroll&val=' + (enrollment ? '1' : '0'))
-                    .then(response => {
-                        document.getElementById('enrollStatus').textContent = enrollment ? 'ON' : 'OFF';
-                    });
-            }
-    
-            function registerUser() {
-                const username = document.getElementById('username').value;
-                const password = document.getElementById('password').value;
-                const email = document.getElementById('email').value;
-                const phone = document.getElementById('phone').value;
-                
-                if (!username || !password || !email || !phone) {
-                    document.getElementById('errorMessage').textContent = 'Please fill in all fields';
-                    return;
-                }
-
-                if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-                    document.getElementById('errorMessage').textContent = 'Please enter a valid email address';
-                    return;
-                }
-
-                if (!phone.match(/^\+?[\d\s-]+$/)) {
-                    document.getElementById('errorMessage').textContent = 'Please enter a valid phone number';
-                    return;
-                }
-    
-                if (!enrollment) {
-                    document.getElementById('errorMessage').textContent = 'Please enable face enrollment and look at the camera';
-                    return;
-                }
-    
-                fetch(baseHost + '/register/submit', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username, password, email, phone })
-                })
-                .then(response => {
-                    if (response.ok) {
-                        alert('Registration successful! You can now login.');
-                        window.location.href = '/';
-                    } else if (response.status === 503) {
-                        document.getElementById('errorMessage').textContent = 'Maximum number of users reached';
-                    } else {
-                        document.getElementById('errorMessage').textContent = 'Registration failed';
-                    }
-                })                .catch(error => {
-                    document.getElementById('errorMessage').textContent = 'Registration failed';
-                });
-            }
-            
-            // Function to stop the alarm buzzer
-            function stopAlarm() {
-                fetch('https://api-4u7e.onrender.com/stop_buzzer')
-                    .then(response => {
-                        console.log('Alarm stopped successfully');
-                    })
-                    .catch(error => {
-                        console.error('Error stopping alarm:', error);
-                    });
-            }
-        </script>
-    </body>
-    </html>
 )rawliteral";

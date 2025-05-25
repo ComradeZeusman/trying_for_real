@@ -1,0 +1,24 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build and Upload ESP32-CAM",
+			"type": "shell",
+			"command": "arduino-cli",
+			"args": [
+				"compile",
+				"--upload",
+				"--port",
+				"COM3",
+				"--fqbn",
+				"esp32:esp32:esp32cam",
+				"c:\\Users\\Stanf\\OneDrive\\Documents\\Arduino\\Final year project\\take11\\CameraWebServer"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$gcc"
+			],
+			"isBackground": false
+		}
+	]
+}

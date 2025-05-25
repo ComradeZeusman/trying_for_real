@@ -34,12 +34,7 @@ int faceWidth = 0; // Width of detected face
 int faceHeight = 0; // Height of detected face
 bool faceDetected = false; // Flag to indicate if a face is currently detected
 
-// Buzzer control variables
-bool buzzer_active = false; // Flag to track if buzzer is currently activated
-unsigned long last_buzzer_api_call = 0; // Timestamp of last buzzer API call
-unsigned long buzzer_activation_time = 0; // Timestamp when the buzzer was last activated
-const unsigned long BUZZER_API_COOLDOWN = 5000; // 5 seconds cooldown between API calls
-const unsigned long BUZZER_AUTO_TURNOFF_DELAY = 10000; // 10 seconds auto-turnoff
+
 
 extern void moveServoToTrackFace(); // Forward declaration for function in main file
 
@@ -49,8 +44,7 @@ extern void moveServoToTrackFace(); // Forward declaration for function in main 
 
 // Forward declarations
 static void log_activity(const char* message);
-static void control_buzzer(bool activate); // Function to make API requests for buzzer control
-void check_buzzer_auto_turnoff(); // Function to check if buzzer should be turned off automatically (made public for use in main sketch)
+static bool initDefaultAdmin(); // Add function declaration for default admin initialization
 
 // Add authentication related structures and variables
 typedef struct {
@@ -127,6 +121,31 @@ static bool loadUsersFromSPIFFS() {
     return true;
 }
 
+// Function to initialize the default admin account if no users exist
+static bool initDefaultAdmin() {
+    // If we already have users, don't create the default admin
+    if (num_users > 0) {
+        return true;
+    }
+      // Default admin credentials - stored in SPIFFS, not hardcoded in login handler
+    if (num_users < MAX_USERS) {
+        strncpy(users[num_users].username, "Madalo", sizeof(users[num_users].username) - 1); // Match existing case
+        strncpy(users[num_users].password, "mada@12345678", sizeof(users[num_users].password) - 1);
+        strncpy(users[num_users].email, "admin@ufulu.com", sizeof(users[num_users].email) - 1); 
+        users[num_users].phone[0] = '\0'; // No phone number for default admin
+        users[num_users].face_id = 0; // No face ID for default admin
+        num_users++;
+        
+        Serial.println("Default admin account created");
+        log_activity("Default admin account initialized");
+        
+        // Save to SPIFFS
+        return saveUsersToSPIFFS();
+    }
+    
+    return false;
+}
+
 #define ENROLL_CONFIRM_TIMES 5
 #define FACE_ID_SAVE_NUMBER 7
 
@@ -179,8 +198,6 @@ static int8_t detection_enabled = 0;
 static int8_t recognition_enabled = 0;
 static int8_t is_enrolling = 0;
 static face_id_list id_list = {0};
-
-// No buzzer variables needed
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
@@ -258,51 +275,7 @@ static void flash_led() {
     }
 }
 
-static void control_buzzer(bool activate) {
-    // Skip API calls if we've made one recently (to prevent flooding)
-    if (millis() - last_buzzer_api_call < BUZZER_API_COOLDOWN) {
-        return;
-    }
-    
-    // Only make API call if buzzer state needs to change
-    if (activate == buzzer_active) {
-        return;
-    }
-    
-    HTTPClient http;
-    
-    // Correct URL format (replacing semicolons with colons)
-    if (activate) {
-        http.begin("https://api-4u7e.onrender.com/run_buzzer");
-        Serial.println("Sending API request to start buzzer");
-    } else {
-        http.begin("https://api-4u7e.onrender.com/stop_buzzer");
-        Serial.println("Sending API request to stop buzzer");
-    }
-    
-    // Make the GET request
-    int httpResponseCode = http.GET();
-    
-    if (httpResponseCode > 0) {
-        String response = http.getString();
-        Serial.printf("Buzzer API response: %d - %s\n", httpResponseCode, response.c_str());        buzzer_active = activate;  // Update buzzer status
-        
-        // Log the activity
-        if (activate) {
-            buzzer_activation_time = millis(); // Record when buzzer was activated
-            log_activity("Buzzer activated due to intruder detection");
-        } else {
-            log_activity("Buzzer deactivated - no intruder detected");
-        }
-    } else {
-        Serial.printf("Buzzer API request failed, error: %d\n", httpResponseCode);
-    }
-    
-    // Record time of API call
-    last_buzzer_api_call = millis();
-    
-    http.end();
-}
+
 
 static void log_activity(const char* message) {
     if (activity_count < MAX_ACTIVITIES) {
@@ -316,45 +289,6 @@ static void log_activity(const char* message) {
     activities[0].timestamp = millis();
 }
 
-void check_buzzer_auto_turnoff() {
-    // Check if buzzer is active and if the auto-turnoff time has passed
-    if (buzzer_active && (millis() - buzzer_activation_time >= BUZZER_AUTO_TURNOFF_DELAY)) {
-        Serial.println("Auto-turnoff: Buzzer has been active for 10 seconds, turning off");
-        control_buzzer(false);
-    }
-}
-
-static void send_sms_alert(const char* phone_number) {
-    HTTPClient http;
-    http.begin("https://telcomw.com/api-v2/send");
-    http.addHeader("Content-Type", "multipart/form-data; boundary=boundary");
-    
-    // Use a static buffer to build the body
-    char body[512]; // Adjust size based on your needs
-    snprintf(body, sizeof(body),
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"api_key\"\r\n\r\nEBNZQ2IHYOP6MQXMI0UF\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"password\"\r\n\r\niamwhoiam123\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"text\"\r\n\r\nIntruder Alert! Unknown face detected on your ESP32-CAM\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"numbers\"\r\n\r\n%s\r\n"
-        "--boundary\r\n"
-        "Content-Disposition: form-data; name=\"from\"\r\n\r\nWGIT\r\n"
-        "--boundary--\r\n",
-        phone_number);
-
-    int httpResponseCode = http.POST((uint8_t*)body, strlen(body));
-    
-    if (httpResponseCode > 0) {
-        Serial.printf("SMS alert sent successfully, response code: %d\n", httpResponseCode);
-    } else {
-        Serial.printf("Error sending SMS alert: %d\n", httpResponseCode);
-    }
-    
-    http.end();
-}
 
 static void draw_face_boxes(dl_matrix3du_t *image_matrix, box_array_t *boxes, int face_id){
     int x, y, w, h, i;
@@ -444,29 +378,13 @@ static int run_face_recognition(dl_matrix3du_t *image_matrix, box_array_t *net_b
             matched_id = recognize_face(&id_list, aligned_face);     
                    if (matched_id >= 0) {
                 Serial.printf("Match Face ID: %u\n", matched_id);
-                rgb_printf(image_matrix, FACE_COLOR_GREEN, "Hello Subject %u", matched_id);
-                char msg[100];
+                rgb_printf(image_matrix, FACE_COLOR_GREEN, "Hello Subject %u", matched_id);                char msg[100];
                 snprintf(msg, sizeof(msg), "Recognized face ID: %d", matched_id);
                 log_activity(msg);
-                
-                // Deactivate buzzer if it was active (recognized user, not an intruder)
-                control_buzzer(false); 
             } else {
                 Serial.println("No Match Found");
                 rgb_print(image_matrix, FACE_COLOR_RED, "Intruder Alert!");
                 log_activity("Intruder Alert - Unknown face detected");
-                
-                // Activate buzzer via API call
-                control_buzzer(true);
-                
-                // Send SMS alert to all registered users
-                if(activatesms){
-                for(int i = 0; i < num_users; i++) {
-                    if(users[i].phone[0] != '\0') {
-                        send_sms_alert(users[i].phone);
-                    }
-                }
-            }
                 matched_id = -1;
             }
         }
@@ -492,9 +410,6 @@ static size_t jpg_encode_stream(void * arg, size_t index, const void* data, size
 }
 
 static esp_err_t capture_handler(httpd_req_t *req){
-    // Check if buzzer should be turned off automatically
-    check_buzzer_auto_turnoff();
-    
     camera_fb_t * fb = NULL;
     esp_err_t res = ESP_OK;
     int64_t fr_start = esp_timer_get_time();
@@ -604,11 +519,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
     res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
     if(res != ESP_OK){
         return res;
-    }
-
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");    while(true){
-        // Check if buzzer should be turned off automatically
-        check_buzzer_auto_turnoff();
+    }    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");    while(true){
         
         detected = false;
         face_id = 0;
@@ -817,30 +728,73 @@ static esp_err_t cmd_handler(httpd_req_t *req){
         // Example: /control?var=servo_move&val=10,-5 (move pan right 10 degrees, tilt up 5 degrees)
         int pan_change = 0, tilt_change = 0;
         if (sscanf(value, "%d,%d", &pan_change, &tilt_change) == 2) {
+            // Access servo control variables from main file
             extern int panPosition;
             extern int tiltPosition;
-            extern void setServoPositions(int pan, int tilt);
+            extern const int SERVO_STEP;
+            extern int SERVO_MIN;
+            extern int SERVO_MAX;
+            extern Servo panServo;
+            extern Servo tiltServo;
             
-            // Calculate new positions
-            int newPanPos = panPosition + pan_change;
-            int newTiltPos = tiltPosition + tilt_change;
+            // Apply the requested changes
+            int new_pan = panPosition + pan_change;
+            int new_tilt = tiltPosition + tilt_change;
             
-            // Update servo positions
-            setServoPositions(newPanPos, newTiltPos);
+            // Constrain to valid range
+            new_pan = (new_pan < SERVO_MIN) ? SERVO_MIN : ((new_pan > SERVO_MAX) ? SERVO_MAX : new_pan);
+            new_tilt = (new_tilt < SERVO_MIN) ? SERVO_MIN : ((new_tilt > SERVO_MAX) ? SERVO_MAX : new_tilt);
             
-            char msg[100];
-            snprintf(msg, sizeof(msg), "Servo moved to pan:%d° tilt:%d°", panPosition, tiltPosition);
-            log_activity(msg);
+            // Move the servos
+            panServo.write(new_pan);
+            tiltServo.write(new_tilt);
             
-            // Prepare JSON response with current servo positions
-            char json_response[100];
-            snprintf(json_response, sizeof(json_response), 
-                "{\"pan_pos\":%d,\"tilt_pos\":%d}", 
-                panPosition, tiltPosition);
+            // Update the position variables
+            panPosition = new_pan;
+            tiltPosition = new_tilt;
+            
+            // Return the new positions as JSON
+            char json_response[64];
+            sprintf(json_response, "{\"pan_pos\":%d,\"tilt_pos\":%d}", panPosition, tiltPosition);
             httpd_resp_set_type(req, "application/json");
+            httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
             return httpd_resp_send(req, json_response, strlen(json_response));
         }
-    }    else if(!strcmp(variable, "servo_center")) {
+    }
+    else if(!strcmp(variable, "servo_position")) {
+        // Command format: /control?var=servo_position&val=pan,tilt
+        // Example: /control?var=servo_position&val=90,45 (set absolute positions)
+        int pan_pos = 0, tilt_pos = 0;
+        if (sscanf(value, "%d,%d", &pan_pos, &tilt_pos) == 2) {
+            // Access servo control variables from main file
+            extern int panPosition;
+            extern int tiltPosition;
+            extern int SERVO_MIN;
+            extern int SERVO_MAX;
+            extern Servo panServo;
+            extern Servo tiltServo;
+            
+            // Constrain to valid range
+            pan_pos = (pan_pos < SERVO_MIN) ? SERVO_MIN : ((pan_pos > SERVO_MAX) ? SERVO_MAX : pan_pos);
+            tilt_pos = (tilt_pos < SERVO_MIN) ? SERVO_MIN : ((tilt_pos > SERVO_MAX) ? SERVO_MAX : tilt_pos);
+            
+            // Move the servos directly to the requested positions
+            panServo.write(pan_pos);
+            tiltServo.write(tilt_pos);
+            
+            // Update the position variables
+            panPosition = pan_pos;
+            tiltPosition = tilt_pos;
+            
+            // Return the new positions as JSON
+            char json_response[64];
+            sprintf(json_response, "{\"pan_pos\":%d,\"tilt_pos\":%d}", panPosition, tiltPosition);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+            return httpd_resp_send(req, json_response, strlen(json_response));
+        }
+    }
+    else if(!strcmp(variable, "servo_center")) {
         // Center both servos (move to 90 degrees)
         extern int panPosition;
         extern int tiltPosition;
@@ -878,11 +832,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
     return httpd_resp_send(req, NULL, 0);
 }
 
-static esp_err_t status_handler(httpd_req_t *req){
-    // Check if buzzer should be turned off automatically
-    check_buzzer_auto_turnoff();
-    
-    static char json_response[2048];  // Increased buffer size
+static esp_err_t status_handler(httpd_req_t *req){    static char json_response[2048];  // Increased buffer size
 
     sensor_t * s = esp_camera_sensor_get();
     char * p = json_response;
@@ -927,20 +877,7 @@ static esp_err_t status_handler(httpd_req_t *req){
     p+=sprintf(p, "\"hmirror\":%u,", s->status.hmirror);
     p+=sprintf(p, "\"dcw\":%u,", s->status.dcw);    p+=sprintf(p, "\"colorbar\":%u,", s->status.colorbar);
     p+=sprintf(p, "\"face_detect\":%u,", detection_enabled);
-    p+=sprintf(p, "\"face_enroll\":%u,", is_enrolling);
-    p+=sprintf(p, "\"face_recognize\":%u,", recognition_enabled);
-    
-    // Add buzzer info
-    p+=sprintf(p, "\"buzzer_active\":%s,", buzzer_active ? "true" : "false");
-    if (buzzer_active) {
-        unsigned long buzzer_active_time = (millis() - buzzer_activation_time) / 1000;
-        unsigned long auto_off_in = (BUZZER_AUTO_TURNOFF_DELAY / 1000) - buzzer_active_time;
-        p+=sprintf(p, "\"buzzer_active_for\":%lu,", buzzer_active_time);
-        p+=sprintf(p, "\"buzzer_auto_off_in\":%lu", auto_off_in > 0 ? auto_off_in : 0);
-    } else {
-        p+=sprintf(p, "\"buzzer_active_for\":0,");
-        p+=sprintf(p, "\"buzzer_auto_off_in\":0");
-    }
+    p+=sprintf(p, "\"face_enroll\":%u,", is_enrolling);    p+=sprintf(p, "\"face_recognize\":%u", recognition_enabled);
     
     *p++ = '}';
     *p++ = 0;
@@ -964,73 +901,70 @@ static esp_err_t login_handler(httpd_req_t *req) {
 
     int ret = httpd_req_recv(req, content, recv_size);
     if (ret <= 0) {
+        Serial.println("Failed to receive login request data");
         return ESP_FAIL;
     }
     content[recv_size] = '\0';
+    Serial.printf("Login request received: %s\n", content);
 
     char username[32];
     char password[32];
+    
     // Basic parsing of JSON - in real app use proper JSON parser
     if (sscanf(content, "{\"username\":\"%31[^\"]\",\"password\":\"%31[^\"]\"}", username, password) == 2) {
+        Serial.printf("Login attempt with username: %s\n", username);
+          // Fallback for empty user database
+        if (num_users == 0) {
+            // Add default admin as a fallback if no users exist
+            strncpy(users[0].username, "Madalo", sizeof(users[0].username) - 1); // Use the same case as stored in system
+            strncpy(users[0].password, "mada@12345678", sizeof(users[0].password) - 1);
+            num_users = 1;
+            Serial.println("Created emergency default admin account");
+        }
+          // Check credentials against users stored in SPIFFS
         for (int i = 0; i < num_users; i++) {
-            if (strcmp(users[i].username, username) == 0 && 
-                strcmp(users[i].password, password) == 0) {
+            Serial.printf("Checking against user[%d]: %s\n", i, users[i].username);
+            // Case insensitive compare for username, case sensitive for password
+            bool usernameMatch = true;
+            char* storedUsername = users[i].username;
+            char* inputUsername = username;
+            
+            // Case insensitive comparison for username
+            while (*storedUsername && *inputUsername) {
+                if (tolower((unsigned char)*storedUsername) != tolower((unsigned char)*inputUsername)) {
+                    usernameMatch = false;
+                    break;
+                }
+                storedUsername++;
+                inputUsername++;
+            }
+            
+            if (*storedUsername || *inputUsername) {
+                usernameMatch = false; // Different lengths
+            }
+            
+            if (usernameMatch && strcmp(password, users[i].password) == 0) {
                 is_authenticated = true;
-                activatesms = true; // Enable SMS alerts for this user
+                log_activity("User login successful");
+                Serial.printf("Login successful for user: %s (case-insensitive match with %s)\n", 
+                              username, users[i].username);
                 httpd_resp_set_status(req, "200 OK");
                 httpd_resp_send(req, NULL, 0);
                 return ESP_OK;
             }
         }
+    } else {
+        Serial.println("Failed to parse login JSON");
     }
     
+    log_activity("Failed login attempt");
+    Serial.println("Login failed - invalid credentials");
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_send(req, NULL, 0);
     return ESP_OK;
 }
 
-static esp_err_t register_handler(httpd_req_t *req) {
-    if (num_users >= MAX_USERS) {
-        httpd_resp_set_status(req, "503 Service Unavailable");
-        httpd_resp_send(req, "Maximum users reached", 0);
-        return ESP_OK;
-    }
-
-    char content[256];  // Increased buffer size for additional fields
-    size_t recv_size = MIN(req->content_len, sizeof(content));
-
-    int ret = httpd_req_recv(req, content, recv_size);
-    if (ret <= 0) {
-        return ESP_FAIL;
-    }
-    content[recv_size] = '\0';
-
-    char username[32];
-    char password[32];
-    char email[64];
-    char phone[20];
-    
-    if (sscanf(content, "{\"username\":\"%31[^\"]\",\"password\":\"%31[^\"]\",\"email\":\"%63[^\"]\",\"phone\":\"%19[^\"]\"}", 
-        username, password, email, phone) == 4) {
-        
-        strncpy(users[num_users].username, username, sizeof(users[num_users].username) - 1);
-        strncpy(users[num_users].password, password, sizeof(users[num_users].password) - 1);
-        strncpy(users[num_users].email, email, sizeof(users[num_users].email) - 1);
-        strncpy(users[num_users].phone, phone, sizeof(users[num_users].phone) - 1);
-        users[num_users].face_id = id_list.tail;
-        num_users++;
-        
-        saveUsersToSPIFFS();  // Save updated user list to SPIFFS
-        
-        httpd_resp_set_status(req, "200 OK");
-        httpd_resp_send(req, NULL, 0);
-        return ESP_OK;
-    }
-    
-    httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
+// Register handler removed - using default admin account
 
 static esp_err_t logout_handler(httpd_req_t *req) {
     is_authenticated = false;
@@ -1192,18 +1126,14 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
                         "  <div class='section'>\n"
                         "    <h2>Hardware Status</h2>\n"
                         "    <table>\n"
-                        "      <tr><th>Device</th><th>Status</th></tr>\n"
-                        "      <tr><td>Pan Servo Position</td><td>%d°</td></tr>\n"
+                        "      <tr><th>Device</th><th>Status</th></tr>\n"                        "      <tr><td>Pan Servo Position</td><td>%d°</td></tr>\n"
                         "      <tr><td>Tilt Servo Position</td><td>%d°</td></tr>\n"
                         "      <tr><td>Auto Face Tracking</td><td>%s</td></tr>\n"
-                        "      <tr><td>Alert Buzzer</td><td>%s</td></tr>\n"
                         "      <tr><td>Flash LED</td><td>Ready</td></tr>\n"
                         "    </table>\n"
-                        "  </div>\n",
-                        panPosition,
+                        "  </div>\n",                        panPosition,
                         tiltPosition,
-                        autoTrackingEnabled ? "Enabled" : "Disabled",
-                        buzzer_active ? "Active" : "Ready"
+                        autoTrackingEnabled ? "Enabled" : "Disabled"
                     );
                     
                     // Add SMS alerts section if applicable
@@ -1296,16 +1226,7 @@ static esp_err_t dashboard_handler(httpd_req_t *req) {
     return httpd_resp_send(req, DASHBOARD_HTML, strlen(DASHBOARD_HTML));
 }
 
-static esp_err_t registration_page_handler(httpd_req_t *req) {
-     if (!is_authenticated) {
-        httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/");
-        httpd_resp_send(req, NULL, 0);
-        return ESP_OK;
-    }
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, REGISTRATION_HTML, strlen(REGISTRATION_HTML));
-}
+// Registration page handler removed - using default admin account
 
 void startCameraServer(){
     start_time = millis();  // Initialize start time
@@ -1315,30 +1236,24 @@ void startCameraServer(){
 
     // Initialize flash LED
     setup_led();
+      // Load users from SPIFFS
+    if (!loadUsersFromSPIFFS()) {
+        Serial.println("Failed to load users from SPIFFS");
+    }
     
-    // Load users from SPIFFS
-    loadUsersFromSPIFFS();
+    // Make sure we initialize default admin regardless of SPIFFS load result
+    if (!initDefaultAdmin()) {
+        Serial.println("Failed to initialize default admin");
+    } else {
+        Serial.println("Default admin account ready with username 'madalo' and password 'mada@12345678'");
+    }
 
     httpd_uri_t index_uri = {
         .uri       = "/",
         .method    = HTTP_GET,
         .handler   = index_handler,
         .user_ctx  = NULL
-    };
-
-    httpd_uri_t registration_page_uri = {
-        .uri       = "/register",
-        .method    = HTTP_GET,
-        .handler   = registration_page_handler,
-        .user_ctx  = NULL
-    };
-
-    httpd_uri_t register_api_uri = {
-        .uri       = "/register/submit",
-        .method    = HTTP_POST,
-        .handler   = register_handler,
-        .user_ctx  = NULL
-    };
+    };    // Registration functionality removed - using default admin account
 
     httpd_uri_t login_uri = {
         .uri       = "/login",
@@ -1414,11 +1329,9 @@ void startCameraServer(){
     
     face_id_init(&id_list, FACE_ID_SAVE_NUMBER, ENROLL_CONFIRM_TIMES);
     
-    Serial.printf("Starting web server on port: '%d'\n", config.server_port);
-    if (httpd_start(&camera_httpd, &config) == ESP_OK) {
+    Serial.printf("Starting web server on port: '%d'\n", config.server_port);    if (httpd_start(&camera_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(camera_httpd, &index_uri);
-        httpd_register_uri_handler(camera_httpd, &registration_page_uri);
-        httpd_register_uri_handler(camera_httpd, &register_api_uri);
+        // Registration removed - using default admin account only
         httpd_register_uri_handler(camera_httpd, &login_uri);
         httpd_register_uri_handler(camera_httpd, &logout_uri);
         httpd_register_uri_handler(camera_httpd, &check_auth_uri);

@@ -57,8 +57,9 @@ int yPositions[5] = {0, 0, 0, 0, 0};
 int xPositionIndex = 0;
 int yPositionIndex = 0;
 
-const char* ssid = "tama";
-const char* password = "12345678";
+// AP mode configuration
+const char* ssid = "Mada security";
+const char* password = "12345678";  // Password for AP mode
 
 void startCameraServer();
 
@@ -147,10 +148,23 @@ void setup() {
   // Initialize flash LED pin
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, LOW); // Flash off by default
+    // Initialize SPIFFS for user data storage
+  int spiffsRetries = 0;
+  while (!SPIFFS.begin(true) && spiffsRetries < 3) {
+    Serial.println("Failed to mount SPIFFS, retrying...");
+    spiffsRetries++;
+    delay(500);
+  }
   
-  // Initialize SPIFFS for user data storage
-  if (!SPIFFS.begin(true)) {
-    Serial.println("An error occurred while mounting SPIFFS");
+  if (spiffsRetries == 3) {
+    Serial.println("CRITICAL: SPIFFS mount failed after 3 attempts. Authentication may not work.");
+    // Format SPIFFS as a last resort
+    if (SPIFFS.format()) {
+      Serial.println("SPIFFS formatted successfully");
+      if (SPIFFS.begin(true)) {
+        Serial.println("SPIFFS mounted after format");
+      }
+    }
   } else {
     Serial.println("SPIFFS mounted successfully");
   }
@@ -225,20 +239,23 @@ void setup() {
   s->set_vflip(s, 1);
   s->set_hmirror(s, 1);
 #endif
-
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  // Configure AP mode instead of connecting to an existing network
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  
   Serial.println("");
-  Serial.println("WiFi connected");
+  Serial.println("AP Mode Enabled");
+  Serial.print("AP Name: ");
+  Serial.println(ssid);
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
 
   startCameraServer();
 
-  Serial.print("Camera Ready! Use 'http://");
-  Serial.print(WiFi.localIP());
+  Serial.print("Camera Ready! Connect to '");
+  Serial.print(ssid);
+  Serial.print("' WiFi network and use 'http://");
+  Serial.print(IP);
   Serial.println("' to connect");
   
   // Initialize face tracking
@@ -256,12 +273,7 @@ void setServoPositions(int pan, int tilt) {
   tiltServo.write(tiltPosition);
 }
 
-// Forward declaration of check_buzzer_auto_turnoff from app_httpd.cpp
-extern void check_buzzer_auto_turnoff();
-
 void loop() {
-  // Check if buzzer should be automatically turned off
-  check_buzzer_auto_turnoff();
   
   // The face detection and tracking mainly happens in the HTTP server task
   // Inside the draw_face_boxes() function, which calls moveServoToTrackFace()
