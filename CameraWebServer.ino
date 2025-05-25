@@ -63,6 +63,91 @@ const char* password = "12345678";  // Password for AP mode
 
 void startCameraServer();
 
+// Boot sequence with flashing LED and servo movements
+void runBootSequence() {
+  Serial.println("Starting boot sequence...");
+  
+  // Flash LED pattern (3 quick flashes, then 1 long flash)
+  for(int i = 0; i < 3; i++) {
+    digitalWrite(FLASH_LED_PIN, HIGH);
+    delay(100);
+    digitalWrite(FLASH_LED_PIN, LOW);
+    delay(100);
+  }
+  delay(300);
+  digitalWrite(FLASH_LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(FLASH_LED_PIN, LOW);
+  
+  // Servo initialization sequence - like a "flex"
+  Serial.println("Testing servo movement...");
+  
+  // Center both servos first
+  panServo.write(90);
+  tiltServo.write(90);
+  delay(500);
+  
+  // Pan servo sweep - left to center to right to center
+  for(int pos = 90; pos >= SERVO_MIN + 20; pos -= 5) {
+    panServo.write(pos);
+    delay(30);
+  }
+  for(int pos = SERVO_MIN + 20; pos <= SERVO_MAX - 20; pos += 5) {
+    panServo.write(pos);
+    delay(30);
+  }
+  for(int pos = SERVO_MAX - 20; pos >= 90; pos -= 5) {
+    panServo.write(pos);
+    delay(30);
+  }
+  
+  // Flash LED once between movements
+  digitalWrite(FLASH_LED_PIN, HIGH);
+  delay(100);
+  digitalWrite(FLASH_LED_PIN, LOW);
+  
+  // Tilt servo sweep - up to center to down to center
+  for(int pos = 90; pos >= SERVO_MIN + 20; pos -= 5) {
+    tiltServo.write(pos);
+    delay(30);
+  }
+  for(int pos = SERVO_MIN + 20; pos <= SERVO_MAX - 20; pos += 5) {
+    tiltServo.write(pos);
+    delay(30);
+  }
+  for(int pos = SERVO_MAX - 20; pos >= 90; pos -= 5) {
+    tiltServo.write(pos);
+    delay(30);
+  }
+  
+  // Both servos do a small circular motion
+  for(int i = 0; i < 360; i += 30) {
+    float rad = i * DEG_TO_RAD;
+    int panOffset = 15 * sin(rad);
+    int tiltOffset = 15 * cos(rad);
+    
+    panServo.write(90 + panOffset);
+    tiltServo.write(90 + tiltOffset);
+    delay(50);
+  }
+  
+  // Return both servos to center position
+  panServo.write(90);
+  tiltServo.write(90);
+  panPosition = 90;
+  tiltPosition = 90;
+  
+  // Final confirmation flash pattern
+  for(int i = 0; i < 2; i++) {
+    digitalWrite(FLASH_LED_PIN, HIGH);
+    delay(200);
+    digitalWrite(FLASH_LED_PIN, LOW);
+    delay(200);
+  }
+  
+  Serial.println("Boot sequence completed!");
+}
+
 // Function to move servo to track the detected face
 void moveServoToTrackFace() {
   if (!faceDetected) {
@@ -148,7 +233,8 @@ void setup() {
   // Initialize flash LED pin
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, LOW); // Flash off by default
-    // Initialize SPIFFS for user data storage
+  
+  // Initialize SPIFFS for user data storage
   int spiffsRetries = 0;
   while (!SPIFFS.begin(true) && spiffsRetries < 3) {
     Serial.println("Failed to mount SPIFFS, retrying...");
@@ -176,10 +262,8 @@ void setup() {
   panServo.attach(panServoPin, 500, 2400); // Min/Max pulse width for most servos
   tiltServo.attach(tiltServoPin, 500, 2400); // Min/Max pulse width for most servos
   
-  // Move servos to initial center position
-  panServo.write(panPosition);
-  tiltServo.write(tiltPosition);
-  delay(500);
+  // Run boot sequence with LED flashing and servo movement
+  runBootSequence();
   
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
